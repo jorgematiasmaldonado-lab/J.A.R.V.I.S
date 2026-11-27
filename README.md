@@ -125,13 +125,15 @@ En Supabase → **Authentication**:
 
 ### Paso 5 · GitHub: secrets, variables y despliegue
 
-1. **Supabase → Account (arriba a la derecha) → Access Tokens → Generate new token**, nombre `github-jarvis`.
-2. En GitHub → repo → **Settings → Secrets and variables → Actions**:
-   - **Secrets:** `SUPABASE_ACCESS_TOKEN` (el token), `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`.
-   - **Variables:** `SUPABASE_URL`, `SUPABASE_CLAVE_PUBLICA` (la *publishable*).
-3. **Settings → Environments → New environment** `produccion` (opcional: *Required reviewers* = vos, para aprobar cada despliegue).
-4. **Actions → Backend → Run workflow**. Corre las pruebas, aplica la base de datos, publica la función y verifica que nada sea público. Todo tiene que quedar en verde.
-5. **Actions → Publicar web → Run workflow**. Al terminar, la app queda en `https://jorgematiasmaldonado-lab.github.io/J.A.R.V.I.S/`.
+1. **Settings → Environments → New environment** `produccion`. Recomendado: *Required reviewers* = vos (aprobás cada despliegue) y *Deployment branches* = solo `main`.
+2. **Token de Supabase con permisos mínimos:** Supabase → tu avatar → **Access Tokens → Generate new token**, nombre `github-jarvis`. Si te deja elegir permisos, marcá **solo** `edge_functions_read` y `edge_functions_write`, limitado a este proyecto.
+3. **Cadena de conexión:** en el panel del proyecto, botón **Connect** (arriba) → **Session pooler** → copiá la cadena `postgresql://postgres.xxxx:[YOUR-PASSWORD]@…pooler.supabase.com:5432/postgres` **dejando `[YOUR-PASSWORD]` tal cual**.
+4. En **Settings → Environments → produccion**:
+   - **Environment secrets:** `SUPABASE_ACCESS_TOKEN` (el token), `SUPABASE_DB_PASSWORD` (la contraseña de la base), `SUPABASE_PROJECT_REF` (las 20 letras del proyecto; acepta también la URL).
+   - **Environment variables:** `SUPABASE_DB_CONEXION` (la cadena del punto 3).
+5. En **Settings → Secrets and variables → Actions → Variables** (del repositorio): `SUPABASE_URL` y `SUPABASE_CLAVE_PUBLICA` (la *publishable*).
+6. **Actions → Backend → Run workflow**. Corre las pruebas, aplica la base de datos, publica la función y verifica que nada sea público. Todo tiene que quedar en verde.
+7. **Actions → Publicar web → Run workflow**. Al terminar, la app queda en `https://jorgematiasmaldonado-lab.github.io/J.A.R.V.I.S/`.
 
 > El workflow de la web **se niega a publicar** si la clave cargada es secreta.
 

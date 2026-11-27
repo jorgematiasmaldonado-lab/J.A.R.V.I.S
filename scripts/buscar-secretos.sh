@@ -25,7 +25,7 @@ PATRONES=(
   'AGE-SECRET-KEY-1[0-9A-Z]{50,}|Clave privada de age'
   'pv_[0-9A-Za-z+/=]{20,}|Posible AccessKey de Picovoice'
   'sk-ant-[0-9A-Za-z_-]{20,}|Clave de la API de Anthropic'
-  'postgres(ql)?://[^:@/[:space:]]+:[^@/[:space:]]{6,}@|Cadena de conexión con contraseña'
+  'postgres(ql)?://[^:@/[:space:]]+:[^@/[:space:][][^@/[:space:]]{5,}@|Cadena de conexión con contraseña (el marcador [YOUR-PASSWORD] se permite)'
 )
 
 # Archivos versionados (o todos, si todavía no hay repo git)

@@ -6,11 +6,19 @@
 # 2) Despliegue (solo en main): migraciones + Edge Function.
 # 3) Verificación: con la clave pública nadie puede leer nada.
 #
-# Secrets del repositorio (Settings → Secrets and variables → Actions):
-#   SUPABASE_ACCESS_TOKEN  token personal de Supabase (Account → Access Tokens)
-#   SUPABASE_DB_PASSWORD   contraseña de la base de datos
-#   SUPABASE_PROJECT_REF   identificador del proyecto (no es secreto, pero así no queda a la vista)
-# Variables: SUPABASE_URL, SUPABASE_CLAVE_PUBLICA (las mismas de la web)
+# Entorno "produccion" (Settings → Environments → produccion):
+#   Secret   SUPABASE_ACCESS_TOKEN  token de Supabase con permisos MÍNIMOS:
+#                                   edge_functions_read + edge_functions_write
+#   Secret   SUPABASE_DB_PASSWORD   contraseña de la base de datos
+#   Secret   SUPABASE_PROJECT_REF   identificador del proyecto (acepta también la URL)
+#   Variable SUPABASE_DB_CONEXION   cadena "Session pooler" copiada del botón Connect
+#                                   de Supabase, CON el texto [YOUR-PASSWORD] tal cual
+#                                   (la contraseña la pone el workflow desde el secret)
+# Variables del repositorio: SUPABASE_URL, SUPABASE_CLAVE_PUBLICA (las mismas de la web)
+#
+# Mínimo privilegio: no se usa "supabase link" (exigiría que el token pueda
+# leer las claves secretas del proyecto). Las migraciones van directo por
+# la conexión a la base y el token solo puede publicar funciones.
 #
 # Los secrets de la FUNCIÓN (GEMINI_API_KEY, ALLOWED_EMAIL, ALLOWED_ORIGINS)
 # se cargan directamente en Supabase, no acá: así la clave de Gemini
@@ -62,6 +70,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      DB_CONEXION: ${{ vars.SUPABASE_DB_CONEXION }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,13 +92,27 @@ jobs:
           [[ -n "$SUPABASE_ACCESS_TOKEN" ]] || { echo "::error::Falta el secret SUPABASE_ACCESS_TOKEN en el entorno produccion."; exit 1; }
           [[ -n "$SUPABASE_DB_PASSWORD" ]] || { echo "::error::Falta el secret SUPABASE_DB_PASSWORD en el entorno produccion."; exit 1; }
           echo "PROJECT_REF=$ref" >> "$GITHUB_ENV"
+
+          # Cadena de conexión: tiene que ser la del "Session pooler" (funciona por IPv4,
+          # que es lo que tienen los servidores de GitHub) y traer el marcador de contraseña
+          con=$(printf '%s' "$DB_CONEXION" | tr -d '[:space:]')
+          [[ -n "$con" ]] || { echo "::error::Falta la variable SUPABASE_DB_CONEXION en el entorno produccion (Supabase → botón Connect → Session pooler)."; exit 1; }
+          if [[ "$con" != *"[YOUR-PASSWORD]"* && "$con" != *"[YOUR_PASSWORD]"* ]]; then
+            echo "::error::SUPABASE_DB_CONEXION debe conservar el texto [YOUR-PASSWORD] tal cual. Si pegó la contraseña ahí, bórrela de la variable y cámbiela en Supabase: las variables no son secretas."
+            exit 1
+          fi
+          [[ "$con" == *"pooler.supabase.com"* ]] || { echo "::error::SUPABASE_DB_CONEXION tiene que ser la del 'Session pooler' (host …pooler.supabase.com)."; exit 1; }
+          [[ "$con" == *"postgres.$ref"* ]] || { echo "::error::SUPABASE_DB_CONEXION no corresponde al proyecto de SUPABASE_PROJECT_REF."; exit 1; }
+          # La contraseña se codifica para URL (puede tener símbolos) y se oculta de los registros
+          clave=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$SUPABASE_DB_PASSWORD")
+          url="${con/\[YOUR-PASSWORD\]/$clave}"; url="${url/\[YOUR_PASSWORD\]/$clave}"
+          echo "::add-mask::$clave"
+          echo "::add-mask::$url"
+          echo "DB_URL=$url" >> "$GITHUB_ENV"
           echo "✓ Configuración completa (proyecto ${ref:0:4}…)"
 
-      - name: Vincular el proyecto
-        run: npx --yes "$SUPABASE_CLI" link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-
       - name: Aplicar migraciones
-        run: npx --yes "$SUPABASE_CLI" db push --linked --password "$SUPABASE_DB_PASSWORD" --yes
+        run: npx --yes "$SUPABASE_CLI" db push --db-url "$DB_URL" --yes
 
       - name: Publicar la Edge Function
         run: npx --yes "$SUPABASE_CLI" functions deploy jarvis-chat --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
