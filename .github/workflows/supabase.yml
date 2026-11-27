@@ -45,7 +45,7 @@ jobs:
   pruebas:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -72,7 +72,7 @@ jobs:
       PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       DB_CONEXION: ${{ vars.SUPABASE_DB_CONEXION }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4

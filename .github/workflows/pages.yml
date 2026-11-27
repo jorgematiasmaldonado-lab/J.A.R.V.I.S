@@ -32,7 +32,7 @@ jobs:
       name: github-pages
       url: ${{ steps.despliegue.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
