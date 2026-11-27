@@ -106,11 +106,14 @@ async function atender(req: Request): Promise<Response> {
 
   // --- Datos del usuario y límites -------------------------------------------
   const db = admin();
-  const [{ data: ajustesDb }, { data: seudonimosDb }, { data: historialDb }] = await Promise.all([
+  const [{ data: ajustesDb, error: e1 }, { data: seudonimosDb, error: e2 }, { data: historialDb, error: e3 }] = await Promise.all([
     db.from("ajustes").select("nombre_trato, ciudad_base, ciudad_lat, ciudad_lon, zona_horaria").eq("user_id", usuarioId).maybeSingle(),
     db.from("seudonimos").select("id, tipo, valor, alias").eq("user_id", usuarioId),
     db.from("mensajes").select("rol, contenido").eq("user_id", usuarioId).order("id", { ascending: false }).limit(MENSAJES_DE_CONTEXTO),
   ]);
+  for (const e of [e1, e2, e3]) if (e) console.error("Error leyendo datos del usuario:", e.message);
+  // Sin la lista de seudónimos no se puede proteger a terceros: mejor no responder
+  if (e2) return respuestaJson(req, 500, { error: "error_base" });
   const ajustes: Ajustes = { ...AJUSTES_POR_DEFECTO, ...(ajustesDb ?? {}) };
   const zona = ajustes.zona_horaria;
 

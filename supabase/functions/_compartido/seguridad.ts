@@ -116,7 +116,12 @@ export async function verificarUsuario(req: Request, canal: string): Promise<Usu
   if (claims.aal !== "aal2") throw new ErrorAcceso(403, "mfa_requerido", "Falta completar la verificación en dos pasos");
 
   // 4) Registrado como dueño
-  const { data: dueno } = await admin().from("dueno").select("user_id").eq("user_id", user.id).maybeSingle();
+  const { data: dueno, error: errDueno } = await admin().from("dueno").select("user_id").eq("user_id", user.id).maybeSingle();
+  if (errDueno) {
+    // Un error de la base NO es "no es dueño": se informa como lo que es
+    console.error("No se pudo consultar la tabla dueno:", errDueno.message);
+    throw new ErrorAcceso(500, "error_base", "No pude verificar el acceso en la base de datos");
+  }
   if (!dueno) {
     await registrarActividad(user.id, { tipo: "acceso_denegado", ok: false, canal, parametros: { motivo: "no_es_dueno" } });
     throw new ErrorAcceso(403, "no_es_dueno", "Falta registrar el dueño en la base (README, paso 4)");

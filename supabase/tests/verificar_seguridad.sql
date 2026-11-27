@@ -24,6 +24,13 @@ group by table_name
 
 union all
 
+-- 2b) El servidor (service_role) puede leer la tabla dueno
+select 'servidor puede leer dueno',
+       case when has_table_privilege('service_role', 'public.dueno', 'SELECT') then 'OK'
+            else 'FALLA: falta la migración de permisos del servidor' end
+
+union all
+
 -- 3) Hay exactamente un dueño registrado
 select 'un único dueño',
        case (select count(*) from public.dueno)
