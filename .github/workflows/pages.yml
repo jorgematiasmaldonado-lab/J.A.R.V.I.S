@@ -1,0 +1,58 @@
+# =====================================================================
+# J.A.R.V.I.S. · Publicación de la web en GitHub Pages
+# Autor: Maldonado Jorge Matias
+#
+# Publica SOLO la carpeta web/ (no el resto del repositorio).
+# Requiere, en Settings → Secrets and variables → Actions → Variables:
+#   SUPABASE_URL            https://<proyecto>.supabase.co
+#   SUPABASE_CLAVE_PUBLICA  sb_publishable_…  (nunca la secreta)
+# Y en Settings → Pages → Source: "GitHub Actions".
+# =====================================================================
+name: Publicar web
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "scripts/configurar-web.sh", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Buscar secretos
+        run: bash scripts/buscar-secretos.sh
+
+      - name: Completar configuración pública
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_CLAVE_PUBLICA: ${{ vars.SUPABASE_CLAVE_PUBLICA }}
+          VERSION: ${{ github.run_number }}-${{ github.sha }}
+        run: |
+          export VERSION="${VERSION:0:16}"
+          bash scripts/configurar-web.sh
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: despliegue
+        uses: actions/deploy-pages@v4

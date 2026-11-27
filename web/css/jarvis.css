@@ -1,0 +1,60 @@
+/* =====================================================================
+   J.A.R.V.I.S. · Estilos propios (el reactor y detalles)
+   Autor: Maldonado Jorge Matias
+   Tailwind se usa para el resto. La clase "ring" original se renombró
+   a "anillo" porque chocaba con la utilidad "ring" de Tailwind.
+   ===================================================================== */
+
+:root { color-scheme: dark; }
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(circle at 50% 30%, #0b2a3d 0%, #020617 65%) fixed, #020617;
+  color: #cffafe;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  -webkit-tap-highlight-color: transparent;
+}
+
+[hidden] { display: none !important; }
+
+/* ---------------- Reactor ---------------- */
+.reactor { position: relative; border-radius: 9999px; background: transparent; border: 0; padding: 0; cursor: pointer; }
+.reactor:focus-visible { outline: 2px solid #67e8f9; outline-offset: 6px; }
+.anillo { position: absolute; inset: 0; border-radius: 9999px; border: 2px solid rgba(34, 211, 238, .35); pointer-events: none; }
+.r1 { inset: 0; border-style: dashed; animation: girar 18s linear infinite; }
+.r2 { inset: 7.3%; border-color: rgba(34, 211, 238, .6); border-top-color: transparent; border-bottom-color: transparent; animation: girar 6s linear infinite reverse; }
+.r3 { inset: 15.6%; border-width: 1px; animation: girar 10s linear infinite; border-left-color: transparent; }
+.nucleo {
+  position: absolute; inset: 24%; border-radius: 9999px; pointer-events: none;
+  background: radial-gradient(circle, #a5f3fc 0%, #22d3ee 35%, rgba(8, 145, 178, .2) 70%);
+  box-shadow: 0 0 40px #22d3ee, inset 0 0 20px #fff;
+  transition: background .3s, box-shadow .3s;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+@keyframes latido { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+
+.escuchando .nucleo {
+  background: radial-gradient(circle, #fecaca 0%, #f87171 35%, rgba(220, 38, 38, .2) 70%);
+  box-shadow: 0 0 50px #f87171, inset 0 0 20px #fff;
+  animation: latido 1s ease-in-out infinite;
+}
+.pensando .r2 { animation-duration: 1.2s; }
+.pensando .nucleo { animation: latido .6s ease-in-out infinite; }
+.hablando .nucleo { animation: latido .35s ease-in-out infinite; }
+.desconectado .nucleo { background: radial-gradient(circle, #e2e8f0 0%, #64748b 40%, rgba(51, 65, 85, .2) 70%); box-shadow: 0 0 20px #64748b; }
+
+/* El reactor chico de la pantalla de carga */
+.reactor-chico { width: 5rem; height: 5rem; }
+
+/* ---------------- Chat ---------------- */
+.msgs { scrollbar-width: none; }
+.msgs::-webkit-scrollbar { width: 0; }
+.escribiendo::after { content: "▍"; margin-left: 2px; animation: parpadeo 1s steps(1) infinite; color: #67e8f9; }
+@keyframes parpadeo { 50% { opacity: 0; } }
+
+/* Respeta la preferencia de "reducir movimiento" del sistema */
+@media (prefers-reduced-motion: reduce) {
+  .r1, .r2, .r3 { animation: none; }
+  .escuchando .nucleo, .pensando .nucleo, .hablando .nucleo { animation-duration: 2.5s; }
+}

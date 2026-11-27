@@ -1,0 +1,25 @@
+# J.A.R.V.I.S. · Archivos que nunca se suben
+# Autor: Maldonado Jorge Matias
+
+# Secretos y credenciales
+.env
+.env.*
+!.env.ejemplo
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+*service-account*.json
+google-services.json
+
+# Supabase CLI (guarda datos del proyecto vinculado)
+supabase/.temp/
+supabase/.branches/
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+node_modules/

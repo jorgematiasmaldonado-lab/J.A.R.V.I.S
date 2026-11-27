@@ -1,0 +1,86 @@
+# =====================================================================
+# J.A.R.V.I.S. · Pruebas y despliegue del backend (Supabase)
+# Autor: Maldonado Jorge Matias
+#
+# 1) Pruebas: seudonimización, bucle del agente, validación, adaptador.
+# 2) Despliegue (solo en main): migraciones + Edge Function.
+# 3) Verificación: con la clave pública nadie puede leer nada.
+#
+# Secrets del repositorio (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  token personal de Supabase (Account → Access Tokens)
+#   SUPABASE_DB_PASSWORD   contraseña de la base de datos
+#   SUPABASE_PROJECT_REF   identificador del proyecto (no es secreto, pero así no queda a la vista)
+# Variables: SUPABASE_URL, SUPABASE_CLAVE_PUBLICA (las mismas de la web)
+#
+# Los secrets de la FUNCIÓN (GEMINI_API_KEY, ALLOWED_EMAIL, ALLOWED_ORIGINS)
+# se cargan directamente en Supabase, no acá: así la clave de Gemini
+# vive en un solo lugar.
+# =====================================================================
+name: Backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/**", "scripts/verificar-publicado.sh", ".github/workflows/supabase.yml"]
+  pull_request:
+    paths: ["supabase/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DENO: deno@2.9.6
+  SUPABASE_CLI: supabase@2.122.1
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Buscar secretos
+        run: bash scripts/buscar-secretos.sh
+      - name: Pruebas (incluye "ningún nombre llega al modelo")
+        run: npx --yes "$DENO" test supabase/functions/_pruebas
+      - name: Verificación de tipos
+        run: npx --yes "$DENO" check supabase/functions/jarvis-chat/index.ts
+      - name: Lint
+        run: npx --yes "$DENO" lint supabase/functions
+
+  desplegar:
+    needs: pruebas
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Entorno "produccion": en Settings → Environments se puede exigir aprobación manual
+    environment: produccion
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Vincular el proyecto
+        run: npx --yes "$SUPABASE_CLI" link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Aplicar migraciones
+        run: npx --yes "$SUPABASE_CLI" db push --linked --password "$SUPABASE_DB_PASSWORD" --yes
+
+      - name: Publicar la Edge Function
+        run: npx --yes "$SUPABASE_CLI" functions deploy jarvis-chat --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
+
+      - name: Verificar que nada sea público
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_CLAVE_PUBLICA: ${{ vars.SUPABASE_CLAVE_PUBLICA }}
+        run: bash scripts/verificar-publicado.sh

@@ -1,0 +1,15 @@
+# J.A.R.V.I.S. · Actualizaciones automáticas de dependencias
+# Autor: Maldonado Jorge Matias
+#
+# Dependabot propone (por pull request, nunca solo) actualizar las
+# acciones de GitHub. Las librerías del CDN y de las Edge Functions
+# tienen versión fija a propósito: se actualizan a mano, recalculando
+# el hash SRI (ver README → "Actualizar una librería").
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "deps"

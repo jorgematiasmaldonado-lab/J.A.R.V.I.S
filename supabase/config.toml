@@ -1,0 +1,13 @@
+# J.A.R.V.I.S. · Configuración mínima de la CLI de Supabase
+# Autor: Maldonado Jorge Matias
+#
+# verify_jwt = false NO significa "sin verificación": la función
+# verifica el JWT en su propio código (firma, email permitido, MFA aal2
+# y dueño registrado). Se desactiva la verificación del gateway porque
+# con las nuevas claves de firma asimétricas puede rechazar tokens
+# válidos. Ver supabase/functions/_compartido/seguridad.ts.
+
+project_id = "jarvis"
+
+[functions.jarvis-chat]
+verify_jwt = false
