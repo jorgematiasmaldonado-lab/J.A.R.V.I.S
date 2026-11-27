@@ -127,7 +127,7 @@ En Supabase → **Authentication**:
 
 1. **Settings → Environments → New environment** `produccion`. Recomendado: *Required reviewers* = vos (aprobás cada despliegue) y *Deployment branches* = solo `main`.
 2. **Token de Supabase con permisos mínimos:** Supabase → tu avatar → **Access Tokens → Generate new token**, nombre `github-jarvis`. Si te deja elegir permisos, marcá **solo** `edge_functions_read` y `edge_functions_write`, limitado a este proyecto.
-3. **Cadena de conexión:** en el panel del proyecto, botón **Connect** (arriba) → **Session pooler** → copiá la cadena `postgresql://postgres.xxxx:[YOUR-PASSWORD]@…pooler.supabase.com:5432/postgres` **dejando `[YOUR-PASSWORD]` tal cual**.
+3. **Cadena de conexión:** en el panel del proyecto, botón **Connect** (arriba) → **Session pooler** → copiá la cadena `postgresql://postgres.xxxx:[YOUR-PASSWORD]@…pooler.supabase.com:5432/postgres` **dejando el marcador `[YOUR-PASSWORD]` (o `[YOUR-DATABASE-PASSWORD]`) tal cual**.
 4. En **Settings → Environments → produccion**:
    - **Environment secrets:** `SUPABASE_ACCESS_TOKEN` (el token), `SUPABASE_DB_PASSWORD` (la contraseña de la base), `SUPABASE_PROJECT_REF` (las 20 letras del proyecto; acepta también la URL).
    - **Environment variables:** `SUPABASE_DB_CONEXION` (la cadena del punto 3).

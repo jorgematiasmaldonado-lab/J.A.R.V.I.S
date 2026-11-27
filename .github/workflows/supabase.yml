@@ -12,7 +12,7 @@
 #   Secret   SUPABASE_DB_PASSWORD   contraseña de la base de datos
 #   Secret   SUPABASE_PROJECT_REF   identificador del proyecto (acepta también la URL)
 #   Variable SUPABASE_DB_CONEXION   cadena "Session pooler" copiada del botón Connect
-#                                   de Supabase, CON el texto [YOUR-PASSWORD] tal cual
+#                                   de Supabase, CON el marcador [YOUR-…PASSWORD] tal cual
 #                                   (la contraseña la pone el workflow desde el secret)
 # Variables del repositorio: SUPABASE_URL, SUPABASE_CLAVE_PUBLICA (las mismas de la web)
 #
@@ -97,15 +97,18 @@ jobs:
           # que es lo que tienen los servidores de GitHub) y traer el marcador de contraseña
           con=$(printf '%s' "$DB_CONEXION" | tr -d '[:space:]')
           [[ -n "$con" ]] || { echo "::error::Falta la variable SUPABASE_DB_CONEXION en el entorno produccion (Supabase → botón Connect → Session pooler)."; exit 1; }
-          if [[ "$con" != *"[YOUR-PASSWORD]"* && "$con" != *"[YOUR_PASSWORD]"* ]]; then
-            echo "::error::SUPABASE_DB_CONEXION debe conservar el texto [YOUR-PASSWORD] tal cual. Si pegó la contraseña ahí, bórrela de la variable y cámbiela en Supabase: las variables no son secretas."
+          # Supabase usa marcadores como [YOUR-PASSWORD] o [YOUR-DATABASE-PASSWORD]
+          if [[ "$con" =~ (\[YOUR[-_A-Z]*PASSWORD\]) ]]; then
+            marcador="${BASH_REMATCH[1]}"
+          else
+            echo "::error::SUPABASE_DB_CONEXION debe conservar el marcador de contraseña tal cual (por ejemplo [YOUR-PASSWORD]). Si pegó la contraseña ahí, bórrela de la variable y cámbiela en Supabase: las variables no son secretas."
             exit 1
           fi
           [[ "$con" == *"pooler.supabase.com"* ]] || { echo "::error::SUPABASE_DB_CONEXION tiene que ser la del 'Session pooler' (host …pooler.supabase.com)."; exit 1; }
           [[ "$con" == *"postgres.$ref"* ]] || { echo "::error::SUPABASE_DB_CONEXION no corresponde al proyecto de SUPABASE_PROJECT_REF."; exit 1; }
           # La contraseña se codifica para URL (puede tener símbolos) y se oculta de los registros
           clave=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$SUPABASE_DB_PASSWORD")
-          url="${con/\[YOUR-PASSWORD\]/$clave}"; url="${url/\[YOUR_PASSWORD\]/$clave}"
+          url="${con/"$marcador"/$clave}"
           echo "::add-mask::$clave"
           echo "::add-mask::$url"
           echo "DB_URL=$url" >> "$GITHUB_ENV"
