@@ -75,7 +75,7 @@ scripts/                     buscar-secretos, configurar-web, verificar-publicad
 
 ### Paso 1 · Repositorio
 
-1. Creá el repositorio **público** `jarvis` en GitHub (Pages gratis requiere repo público; el código no tiene secretos).
+1. Repositorio **público** `J.A.R.V.I.S` en GitHub (ya creado) (Pages gratis requiere repo público; el código no tiene secretos).
 2. En **Settings → Code security**, activá **Secret scanning** y **Push protection** (gratis en repos públicos).
 3. En **Settings → Pages → Source**, elegí **GitHub Actions**.
 
@@ -104,7 +104,7 @@ En Supabase → **Authentication**:
    <p>Si no lo pidió usted, ignore este mensaje.</p>
    ```
    (Así llega un **código** en lugar de un enlace: la app no acepta enlaces de login.)
-4. **URL Configuration → Site URL**: `https://jorgematiasmaldonado-lab.github.io/jarvis/`
+4. **URL Configuration → Site URL**: `https://jorgematiasmaldonado-lab.github.io/J.A.R.V.I.S/`
 5. **Multi-Factor**: verificá que **TOTP** esté habilitado (viene activado).
 
 ### Paso 4 · Secrets de la Edge Function
@@ -116,7 +116,7 @@ En Supabase → **Authentication**:
 |---|---|---|
 | `GEMINI_API_KEY` | la clave nueva | obligatorio |
 | `ALLOWED_EMAIL` | tu email | obligatorio |
-| `ALLOWED_ORIGINS` | `https://jorgematiasmaldonado-lab.github.io` (sin `/jarvis`, sin barra final) | obligatorio |
+| `ALLOWED_ORIGINS` | `https://jorgematiasmaldonado-lab.github.io` (sin `/J.A.R.V.I.S`, sin barra final) | obligatorio |
 | `LLM_MODELO` | `gemini-flash-lite-latest` (o el ID exacto que figure en AI Studio) | opcional |
 | `LIMITE_LLM_POR_DIA` | un poco menos que el límite diario gratuito que muestra AI Studio para tu modelo (*Rate limits*) | recomendado |
 | `LIMITE_POR_MINUTO` / `LIMITE_POR_DIA` | por defecto 10 y 300 mensajes | opcional |
@@ -131,7 +131,7 @@ En Supabase → **Authentication**:
    - **Variables:** `SUPABASE_URL`, `SUPABASE_CLAVE_PUBLICA` (la *publishable*).
 3. **Settings → Environments → New environment** `produccion` (opcional: *Required reviewers* = vos, para aprobar cada despliegue).
 4. **Actions → Backend → Run workflow**. Corre las pruebas, aplica la base de datos, publica la función y verifica que nada sea público. Todo tiene que quedar en verde.
-5. **Actions → Publicar web → Run workflow**. Al terminar, la app queda en `https://jorgematiasmaldonado-lab.github.io/jarvis/`.
+5. **Actions → Publicar web → Run workflow**. Al terminar, la app queda en `https://jorgematiasmaldonado-lab.github.io/J.A.R.V.I.S/`.
 
 > El workflow de la web **se niega a publicar** si la clave cargada es secreta.
 
