@@ -70,6 +70,19 @@ jobs:
         with:
           node-version: 22
 
+      - name: Revisar la configuración
+        run: |
+          # Acepta el ref solo ("abcdefghijklmnopqrst") o la URL completa del proyecto
+          ref=$(printf '%s' "$PROJECT_REF" | tr -d '[:space:]' | sed -E 's#^https?://##; s#\.supabase\.co.*$##' | tr 'A-Z' 'a-z')
+          if [[ ! "$ref" =~ ^[a-z]{20}$ ]]; then
+            echo "::error::El secret SUPABASE_PROJECT_REF no es válido. Debe ser el identificador del proyecto: 20 letras minúsculas (las que aparecen en https://XXXXXXXXXXXXXXXXXXXX.supabase.co). Tiene ${#ref} caracteres."
+            exit 1
+          fi
+          [[ -n "$SUPABASE_ACCESS_TOKEN" ]] || { echo "::error::Falta el secret SUPABASE_ACCESS_TOKEN en el entorno produccion."; exit 1; }
+          [[ -n "$SUPABASE_DB_PASSWORD" ]] || { echo "::error::Falta el secret SUPABASE_DB_PASSWORD en el entorno produccion."; exit 1; }
+          echo "PROJECT_REF=$ref" >> "$GITHUB_ENV"
+          echo "✓ Configuración completa (proyecto ${ref:0:4}…)"
+
       - name: Vincular el proyecto
         run: npx --yes "$SUPABASE_CLI" link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
 
