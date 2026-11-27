@@ -72,8 +72,10 @@ jobs:
 
       - name: Revisar la configuración
         run: |
-          # Acepta el ref solo ("abcdefghijklmnopqrst") o la URL completa del proyecto
-          ref=$(printf '%s' "$PROJECT_REF" | tr -d '[:space:]' | sed -E 's#^https?://##; s#\.supabase\.co.*$##' | tr 'A-Z' 'a-z')
+          # Acepta el ref solo ("abcdefghijklmnopqrst"), la URL del proyecto
+          # (https://ref.supabase.co) o la del panel (supabase.com/dashboard/project/ref/…)
+          ref=$(printf '%s' "$PROJECT_REF" | tr -d '[:space:]' | tr 'A-Z' 'a-z' \
+            | sed -E 's#^.*/project/([a-z]{20}).*$#\1#; s#^https?://##; s#\.supabase\.co.*$##')
           if [[ ! "$ref" =~ ^[a-z]{20}$ ]]; then
             echo "::error::El secret SUPABASE_PROJECT_REF no es válido. Debe ser el identificador del proyecto: 20 letras minúsculas (las que aparecen en https://XXXXXXXXXXXXXXXXXXXX.supabase.co). Tiene ${#ref} caracteres."
             exit 1
