@@ -26,12 +26,18 @@ for tabla in dueno ajustes mensajes actividad seudonimos uso_contadores; do
 done
 
 # La función sin sesión debe responder 401 (o 403 si el origen no está permitido)
-codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$URL/functions/v1/jarvis-chat" \
+respuesta=$(curl -sS -w '\n%{http_code}' -X POST "$URL/functions/v1/jarvis-chat" \
   -H "Origin: https://ejemplo-no-permitido.com" -H "Content-Type: application/json" -d '{"mensaje":"hola"}')
+codigo=$(echo "$respuesta" | tail -1)
+cuerpo=$(echo "$respuesta" | sed '$d' | head -c 300)
 if [[ "$codigo" == "401" || "$codigo" == "403" ]]; then
   echo "✓ jarvis-chat rechaza pedidos sin sesión (HTTP $codigo)"
+elif [[ "$cuerpo" == *configuracion_incompleta* ]]; then
+  echo "✗ jarvis-chat: falta cargar un secret de la función (Supabase → Edge Functions → Secrets)."
+  echo "  El nombre exacto figura en Supabase → Edge Functions → jarvis-chat → Logs."
+  FALLAS=1
 else
-  echo "✗ jarvis-chat respondió $codigo a un pedido sin sesión"; FALLAS=1
+  echo "✗ jarvis-chat respondió $codigo a un pedido sin sesión: $cuerpo"; FALLAS=1
 fi
 
 # Funciones internas: el rol anónimo no puede ejecutarlas

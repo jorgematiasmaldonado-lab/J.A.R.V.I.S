@@ -56,7 +56,24 @@ const AJUSTES_POR_DEFECTO: Ajustes = {
 
 class ErrorCupo extends Error {}
 
+// Si falta configuración (un secret), se responde un error claro en vez
+// de caerse: el detalle (qué secret falta) queda SOLO en los registros
+// de Supabase (Edge Functions → jarvis-chat → Logs), no en la respuesta.
 Deno.serve(async (req) => {
+  try {
+    return await atender(req);
+  } catch (e) {
+    const msg = (e as Error).message ?? "";
+    console.error("jarvis-chat:", msg);
+    const configuracion = msg.startsWith("Falta configurar");
+    return new Response(JSON.stringify({ error: configuracion ? "configuracion_incompleta" : "error_interno" }), {
+      status: configuracion ? 503 : 500,
+      headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+    });
+  }
+});
+
+async function atender(req: Request): Promise<Response> {
   // --- CORS -----------------------------------------------------------
   if (req.method === "OPTIONS") {
     return new Response(null, { status: origenPermitido(req) ? 204 : 403, headers: encabezadosCors(req) });
@@ -189,4 +206,4 @@ Deno.serve(async (req) => {
       "X-Content-Type-Options": "nosniff",
     },
   });
-});
+}
