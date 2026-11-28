@@ -2,7 +2,7 @@
 
 Asistente personal con inteligencia artificial, al estilo de Jarvis.
 **Autor:** Maldonado Jorge Matias · JMM Gestiones & Tecnología
-**Estado:** Fase 0 (seguridad base). Ver [`ESTADO.md`](ESTADO.md) y [`SEGURIDAD.md`](SEGURIDAD.md).
+**Estado:** Fase 1 (memoria y conversaciones). Ver [`ESTADO.md`](ESTADO.md) y [`SEGURIDAD.md`](SEGURIDAD.md).
 
 ---
 
@@ -46,12 +46,15 @@ web/                         lo que se publica en GitHub Pages
   js/supa.js · auth.js       cliente de Supabase, login + MFA
   js/api.js                  llamada a jarvis-chat (SSE) y tablas
   js/voz.js                  hablar (por frases) y escuchar (manos libres)
-  js/ui.js · app.js          interfaz y flujo principal
+  js/ui.js · app.js          interfaz, tarjetas de confirmación y flujo principal
+  js/paneles.js              pantallas Memoria (perfil, recuerdos, nombres) y Actividad
   manifest.webmanifest · sw.js · icons/ · img/
 supabase/
   migrations/                esquema, RLS y funciones SQL
-  functions/jarvis-chat/     el cerebro
-  functions/_compartido/     seguridad, agente, seudonimización, LLM, herramientas
+  functions/jarvis-chat/     el cerebro (charla, herramientas, memoria automática)
+  functions/jarvis-acciones/ crear/editar recuerdos, perfil, confirmar/cancelar acciones
+  functions/_compartido/     seguridad, agente, seudonimización, LLM, embeddings,
+                             memoria, confirmaciones, herramientas
   functions/_pruebas/        pruebas automáticas (deno test)
   tests/verificar_seguridad.sql
 scripts/                     buscar-secretos, configurar-web, verificar-publicado
@@ -163,17 +166,29 @@ Después pegá y ejecutá [`supabase/tests/verificar_seguridad.sql`](supabase/te
 
 ---
 
-## Proteger nombres de personas (seudónimos)
+## Memoria (Fase 1)
 
-Los teléfonos, emails, DNI, CUIL y direcciones se ocultan automáticamente. Los **nombres** se ocultan si están en la tabla `seudonimos`. Hasta que esté la pantalla "Memoria" (Fase 1), se cargan en **SQL Editor**:
+- **Jarvis recuerda solo:** cuando le contás algo duradero ("Mi jefe es Gómez"), lo guarda y dice *"Tomo nota"*. En cada mensaje busca los recuerdos relacionados **por significado** (no por palabras exactas) y los tiene en cuenta.
+- **"¿Qué sabés de X?"** → lista lo que recuerda.
+- **"Olvidá X"** → aparece una **tarjeta Confirmar / Cancelar**. Hasta que no tocás Confirmar, no se borra nada. La tarjeta vence a los 15 minutos.
+- **Nunca guarda** contraseñas, PIN, tarjetas, documentos, CUIL, CBU ni claves: el servidor lo rechaza aunque el modelo lo intente.
+- **Pantalla Memoria:**
+  - **Perfil:** un texto sobre vos que Jarvis siempre tiene en cuenta.
+  - **Recuerdos:** buscar, agregar, editar y borrar.
+  - **Nombres protegidos:** las personas cuyo nombre nunca llega a Gemini (se reemplaza por `[PERSONA_3]`). Agregá también otras formas de nombrarlas ("Pérez", "Juancito").
+- **Pantalla Actividad:** todo lo que hizo Jarvis (consultas, herramientas, confirmaciones, accesos denegados), sin el texto de tus mensajes.
 
-```sql
-insert into public.seudonimos (user_id, tipo, valor, alias)
-select id, 'PERSONA', 'Juan Pérez', array['Pérez', 'Juancito']
-from auth.users where email = 'SU_EMAIL_AQUÍ';
-```
+**Cómo funciona por dentro:** cada recuerdo se guarda con un *embedding* (768 números que representan su significado) calculado por Gemini (`gemini-embedding-001`) sobre el texto **seudonimizado**, y se busca con pgvector en Supabase.
 
-En la Fase 3 se cargan solos desde la lista de personal y los contactos.
+Secrets opcionales nuevos (Supabase → Edge Functions → Secrets):
+
+| Nombre | Por defecto | Para qué |
+|---|---|---|
+| `LIMITE_EMB_POR_DIA` | 800 | Tope diario de llamadas de memoria (1 por mensaje + 1 por recuerdo guardado) |
+| `MEMORIA_UMBRAL` | 0.6 | Qué tan parecido debe ser un recuerdo para usarlo (más alto = más estricto) |
+| `EMBEDDINGS_MODELO` | `gemini-embedding-001` | Modelo de embeddings |
+
+> Si agregás un nombre protegido **después** de tener recuerdos sobre esa persona, la búsqueda de esos recuerdos puede funcionar un poco peor. Editarlos (botón Editar → Guardar) recalcula su significado.
 
 ## Pruebas manuales
 
@@ -195,18 +210,30 @@ En la Fase 3 se cargan solos desde la lista de personal y los contactos.
 - [ ] Con la ubicación desactivada y ciudad base cargada, el clima usa la ciudad base.
 - [ ] **Cerrar en todos** desde la compu → el celular vuelve al login en la próxima consulta.
 
+**Memoria (Fase 1):**
+- [ ] "Mi jefe se llama …" → responde "Tomo nota" y aparece en *Memoria → Recuerdos*.
+- [ ] Recargar y preguntar "¿Quién me supervisa?" → lo recuerda sin que se lo repitas.
+- [ ] "¿Qué sabés de mi jefe?" → lista lo guardado.
+- [ ] "Olvidá lo de mi jefe" → aparece la tarjeta; **Cancelar** no borra nada; repetir y **Confirmar** lo borra.
+- [ ] "Acordate de que la contraseña del wifi es 1234" → se niega por seguridad.
+- [ ] Memoria → agregar, editar y borrar un recuerdo a mano; guardar el perfil.
+- [ ] Memoria → proteger un nombre y preguntar algo con ese nombre: en *Actividad* la consulta muestra "dato(s) protegidos".
+- [ ] Cerrar sesión y abrir en el celular: los recuerdos están ahí.
+
 **Seguridad:**
 - [ ] En *Actions → Backend*, el paso "Verificar que nada sea público" está en verde.
 - [ ] `verificar_seguridad.sql` → todo OK.
 - [ ] En Supabase → *Table Editor → actividad* aparecen los chats y herramientas, sin el texto de los mensajes.
 
-## Costos (Fase 0)
+## Costos (Fases 0 y 1)
 
 | Servicio | Plan | Costo |
 |---|---|---|
 | GitHub (repo + Pages + Actions) | Gratis (repo público) | USD 0 |
 | Supabase | Free | USD 0 · los proyectos inactivos se pausan (hoy, tras ~7 días; ver supabase.com/pricing) y se reactivan desde el panel |
-| Gemini API | Capa gratuita | USD 0 · con límites por minuto y por día; **Google puede usar los datos de la capa gratuita para mejorar sus productos** (por eso la seudonimización) |
+| Gemini API (charla) | Capa gratuita | USD 0 · con límites por minuto y por día; **Google puede usar los datos de la capa gratuita para mejorar sus productos** (por eso la seudonimización) |
+| Gemini API (embeddings de memoria) | Capa gratuita | USD 0 · límite diario propio; Jarvis lo cuenta con `LIMITE_EMB_POR_DIA` |
+| pgvector | Incluido en Supabase | USD 0 |
 | Open-Meteo | Gratis, uso no comercial | USD 0 |
 | **Total** | | **USD 0 / mes** |
 

@@ -27,9 +27,10 @@ export const config = {
   get origenes() {
     return requerida("ALLOWED_ORIGINS").split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
   },
-  limiteMinuto: Number(Deno.env.get("LIMITE_POR_MINUTO") ?? 10),
-  limiteDia: Number(Deno.env.get("LIMITE_POR_DIA") ?? 300),
-  limiteLlmDia: Number(Deno.env.get("LIMITE_LLM_POR_DIA") ?? 800),
+  get limiteMinuto() { return Number(Deno.env.get("LIMITE_POR_MINUTO") ?? 10); },
+  get limiteDia() { return Number(Deno.env.get("LIMITE_POR_DIA") ?? 300); },
+  get limiteLlmDia() { return Number(Deno.env.get("LIMITE_LLM_POR_DIA") ?? 800); },
+  get limiteEmbDia() { return Number(Deno.env.get("LIMITE_EMB_POR_DIA") ?? 800); },
 };
 
 let _admin: SupabaseClient | null = null;
@@ -134,7 +135,7 @@ export async function verificarUsuario(req: Request, canal: string): Promise<Usu
 // Límites de uso
 // ---------------------------------------------------------------------
 export async function consumirCupo(
-  userId: string, tipo: "peticion" | "llm", maxMinuto: number, maxDia: number, zona: string, cantidad = 1,
+  userId: string, tipo: "peticion" | "llm" | "emb", maxMinuto: number, maxDia: number, zona: string, cantidad = 1,
 ): Promise<{ permitido: boolean; minuto: number; dia: number }> {
   const { data, error } = await admin().rpc("consumir_cupo", {
     p_user: userId, p_tipo: tipo, p_max_minuto: maxMinuto, p_max_dia: maxDia, p_zona: zona, p_cantidad: cantidad,

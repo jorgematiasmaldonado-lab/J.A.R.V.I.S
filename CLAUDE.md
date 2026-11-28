@@ -12,6 +12,8 @@ Autor del proyecto: **Maldonado Jorge Matias**.
 - Toda tabla nueva: RLS activada + políticas con `user_id = auth.uid()` y `es_dueno()`; revocar permisos a `anon`; sumarla a `scripts/verificar-publicado.sh`.
 - Toda herramienta nueva: módulo propio en `supabase/functions/_compartido/herramientas/`, esquema de parámetros, nivel (`lectura` / `escritura` / `sensible`) y registro en `actividad`.
 - Nada que llegue al modelo puede contener datos personales sin pasar por `Seudonimizador.ocultar()`.
+- Toda acción **sensible** (borrar, enviar, gastar): la herramienta solo implementa `proponer()`; lo que se ejecuta va en `EJECUTORES` de `confirmaciones.ts` y corre únicamente cuando el dueño toca *Confirmar* (`jarvis-acciones`). Nunca ejecutarla desde el modelo.
+- Nunca guardar contraseñas, tarjetas, documentos, CBU ni claves: todo texto que se persista pasa por `motivoProhibido()`.
 - Una fase por vez. Antes de programar una fase: plan + decisiones con costo + esperar confirmación.
 
 ## Pruebas

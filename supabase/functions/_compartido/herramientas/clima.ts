@@ -71,7 +71,7 @@ export const clima: Herramienta = {
     required: ["dias_adelante"],
   },
 
-  async ejecutar(args, ctx) {
+  async ejecutar(args: Record<string, unknown>, ctx: Contexto) {
     const d = (args.dias_adelante as number) ?? 0;
     const u = await resolverUbicacion(ctx);
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${u.lat}&longitude=${u.lon}` +

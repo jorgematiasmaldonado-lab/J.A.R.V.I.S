@@ -11,3 +11,6 @@ project_id = "jarvis"
 
 [functions.jarvis-chat]
 verify_jwt = false
+
+[functions.jarvis-acciones]
+verify_jwt = false

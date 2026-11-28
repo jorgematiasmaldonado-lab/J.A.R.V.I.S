@@ -8,9 +8,10 @@ import { sb } from "./supa.js";
 import * as auth from "./auth.js";
 import * as api from "./api.js";
 import * as voz from "./voz.js";
+import { cargarActividad, cargarMemoria } from "./paneles.js";
 import {
   $, abrirModal, agregarMsg, bajarChat, cerrarModal, limpiarChat, llenarVoces, mensajeLogin, mostrarPasoLogin,
-  mostrarVista, saludo, setEstado,
+  mostrarVista, saludo, setEstado, tarjetaConfirmacion,
 } from "./ui.js";
 
 // ---------------------------------------------------------------------
@@ -164,7 +165,39 @@ async function entrarApp() {
     agregarMsg("sistema", "No pude cargar la conversación anterior: " + err.message);
   }
   agregarMsg("jarvis", `${saludo()}, ${ajustes.nombre_trato}. Toque el reactor y hábleme.`);
+  mostrarPanel("panelChat");
+  // Acciones sensibles que quedaron esperando confirmación (p. ej. desde otro dispositivo)
+  try {
+    for (const a of await api.accionesPendientes()) mostrarTarjeta(a);
+  } catch { /* no es grave: se pueden volver a pedir */ }
   actualizarUbicacion();
+}
+
+// ---------------- Pestañas ----------------
+function mostrarPanel(id) {
+  for (const b of document.querySelectorAll(".pestana")) {
+    const activa = b.dataset.panel === id;
+    b.classList.toggle("activa", activa);
+    b.setAttribute("aria-selected", String(activa));
+  }
+  for (const p of ["panelChat", "panelMemoria", "panelActividad"]) $(p).hidden = p !== id;
+  if (id === "panelMemoria") cargarMemoria();
+  if (id === "panelActividad") cargarActividad();
+}
+for (const b of document.querySelectorAll(".pestana")) b.onclick = () => mostrarPanel(b.dataset.panel);
+
+// ---------------- Confirmaciones ----------------
+function mostrarTarjeta(accion) {
+  tarjetaConfirmacion(accion, async (confirmar) => {
+    const r = await api.resolverAccion(accion.id, confirmar);
+    if (r.estado === "cancelada") return "Cancelado. No se hizo nada.";
+    if (r.resultado?.borrados != null) {
+      const n = r.resultado.borrados;
+      voz.hablar(n ? `Listo, ${ajustes.nombre_trato}. Ya lo olvidé.` : "No quedaba nada para borrar.");
+      return n ? `Hecho: ${n} ${n === 1 ? "recuerdo olvidado" : "recuerdos olvidados"}.` : "No quedaba nada para borrar.";
+    }
+    return "Hecho.";
+  });
 }
 
 // ---------------- Ubicación del dispositivo (opcional) ----------------
@@ -195,11 +228,13 @@ async function procesar(texto) {
   burbuja.classList.add("escribiendo");
   let recibido = "";
   let codigoError = null;
+  const tarjetas = [];
 
   try {
     const res = await api.consultar(texto, {
       ubicacion: ubicacion ?? undefined,
       onEstado: (t) => { if (!voz.hablando) setEstado("pensando", t); },
+      onConfirmacion: (a) => tarjetas.push(a),
       onTexto: (d) => {
         recibido += d;
         burbuja.textContent = recibido;
@@ -218,6 +253,8 @@ async function procesar(texto) {
     burbuja.textContent = msg;
   } finally {
     burbuja.classList.remove("escribiendo");
+    // Las tarjetas van debajo de la respuesta que las explica
+    for (const a of tarjetas) mostrarTarjeta(a);
     bajarChat();
     ocupado = false;
   }

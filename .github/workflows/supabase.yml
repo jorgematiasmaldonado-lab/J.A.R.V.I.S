@@ -45,10 +45,10 @@ jobs:
   pruebas:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - name: Buscar secretos
@@ -72,10 +72,10 @@ jobs:
       PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       DB_CONEXION: ${{ vars.SUPABASE_DB_CONEXION }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -117,8 +117,11 @@ jobs:
       - name: Aplicar migraciones
         run: npx --yes "$SUPABASE_CLI" db push --db-url "$DB_URL" --yes
 
-      - name: Publicar la Edge Function
-        run: npx --yes "$SUPABASE_CLI" functions deploy jarvis-chat --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
+      - name: Publicar las Edge Functions
+        run: |
+          for f in jarvis-chat jarvis-acciones; do
+            npx --yes "$SUPABASE_CLI" functions deploy "$f" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
+          done
 
       - name: Verificar que nada sea público
         env:

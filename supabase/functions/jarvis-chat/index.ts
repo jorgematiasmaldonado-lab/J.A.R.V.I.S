@@ -22,6 +22,8 @@ import { ejecutarAgente, type MensajeGuardado } from "../_compartido/agente.ts";
 import { declaraciones, ejecutarHerramienta, estadoDe } from "../_compartido/herramientas/index.ts";
 import type { Ajustes, Contexto } from "../_compartido/herramientas/tipos.ts";
 import { capaGemini, crearProveedor, ErrorLLM } from "../_compartido/llm/index.ts";
+import { crearEmbeddings } from "../_compartido/llm/embeddings.ts";
+import { buscarMemorias, contextoMemoria, leerPerfil, type Recuerdo } from "../_compartido/memoria.ts";
 import { promptSistema } from "../_compartido/prompt.ts";
 import {
   admin, config, consumirCupo, encabezadosCors, ErrorAcceso, origenPermitido, registrarActividad, respuestaJson,
@@ -32,6 +34,8 @@ import { ErrorValidacion, type Esquema, validar } from "../_compartido/validar.t
 
 const TAMANO_MAXIMO = 16_000; // bytes del cuerpo
 const MENSAJES_DE_CONTEXTO = 20;
+const RECUERDOS_POR_MENSAJE = 5;
+const UMBRAL_RECUERDOS = Number(Deno.env.get("MEMORIA_UMBRAL") ?? 0.6);
 
 const ESQUEMA_PETICION: Esquema = {
   type: "object",
@@ -130,7 +134,12 @@ async function atender(req: Request): Promise<Response> {
 
   const seud = new Seudonimizador((seudonimosDb ?? []) as EntradaSeudonimo[]);
   const historial = ((historialDb ?? []) as MensajeGuardado[]).reverse();
-  const ctx: Contexto = { userId: usuarioId, canal, ajustes, ubicacion: peticion.ubicacion };
+  const emb = crearEmbeddings();
+  const contarEmb = async () => {
+    const c = await consumirCupo(usuarioId, "emb", 60, config.limiteEmbDia, zona);
+    if (!c.permitido) throw new ErrorCupo("alcanzamos el tope diario de consultas a la memoria");
+  };
+  const ctx: Contexto = { userId: usuarioId, canal, ajustes, ubicacion: peticion.ubicacion, seud, emb, contarEmb };
 
   // --- Respuesta en streaming (SSE) -------------------------------------------
   const codificador = new TextEncoder();
@@ -142,11 +151,28 @@ async function atender(req: Request): Promise<Response> {
         try { controlador.enqueue(codificador.encode(`event: ${evento}\ndata: ${JSON.stringify(datos)}\n\n`)); } catch { /* cliente desconectado */ }
       };
       const inicio = Date.now();
+      // Las acciones sensibles aparecen en la app como tarjeta Confirmar / Cancelar
+      ctx.onConfirmacion = (accion) => enviar("confirmacion", accion);
       try {
+        // Memoria: el perfil siempre, y los recuerdos parecidos al mensaje.
+        // Si falla (cupo, red), Jarvis responde igual, sin recuerdos.
+        let recuerdos: Recuerdo[] = [];
+        if (emb) {
+          try {
+            recuerdos = await buscarMemorias(
+              { userId: usuarioId, seud, emb, canal, contarEmb }, mensaje, RECUERDOS_POR_MENSAJE, UMBRAL_RECUERDOS,
+            );
+          } catch (e) {
+            console.error("Sin recuerdos para este mensaje:", (e as Error).message);
+          }
+        }
+        const perfil = await leerPerfil(usuarioId);
+
         const resultado = await ejecutarAgente({
           proveedor: crearProveedor(),
           seud,
           sistema: promptSistema({ nombreTrato: ajustes.nombre_trato, zonaHoraria: zona, canal }),
+          contexto: contextoMemoria(perfil, recuerdos, zona),
           historial,
           mensaje,
           herramientas: declaraciones(),
@@ -177,6 +203,7 @@ async function atender(req: Request): Promise<Response> {
             pasos: resultado.pasos,
             llamadas_llm: resultado.llamadasLlm,
             herramientas: resultado.herramientasUsadas,
+            recuerdos_usados: recuerdos.length,
             datos_seudonimizados: seud.reemplazos,
             capa: capaGemini(),
             ms: Date.now() - inicio,

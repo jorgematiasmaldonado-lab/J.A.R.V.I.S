@@ -112,6 +112,16 @@
     <button id="btnConfig" class="text-cyan-400 border border-cyan-700 rounded-lg px-3 py-1 text-sm">⚙ Ajustes</button>
   </header>
 
+  <!-- Pestañas -->
+  <nav class="flex gap-1 px-4 mt-3" role="tablist" aria-label="Secciones">
+    <button class="pestana activa" role="tab" data-panel="panelChat" aria-selected="true">CHAT</button>
+    <button class="pestana" role="tab" data-panel="panelMemoria" aria-selected="false">MEMORIA</button>
+    <button class="pestana" role="tab" data-panel="panelActividad" aria-selected="false">ACTIVIDAD</button>
+  </nav>
+
+  <!-- ========== Panel: Chat ========== -->
+  <div id="panelChat" class="flex-1 min-h-0 flex flex-col" role="tabpanel">
+
   <main class="flex-1 min-h-0 flex flex-col lg:flex-row lg:items-start lg:justify-center lg:gap-12 items-center px-4 overflow-hidden">
     <div class="flex flex-col items-center lg:sticky lg:top-8">
       <button id="reactor" class="reactor w-48 h-48 lg:w-64 lg:h-64 mt-6 shrink-0" aria-label="Hablar con Jarvis">
@@ -130,6 +140,79 @@
            placeholder="Escribir a Jarvis…" autocomplete="off" maxlength="2000" aria-label="Mensaje para Jarvis">
     <button class="bg-cyan-600 text-slate-950 font-bold rounded-lg px-4" aria-label="Enviar">➤</button>
   </form>
+  </div>
+
+  <!-- ========== Panel: Memoria ========== -->
+  <section id="panelMemoria" class="flex-1 min-h-0 overflow-y-auto px-4 py-4" role="tabpanel" hidden>
+    <div class="max-w-2xl mx-auto space-y-8 pb-8">
+      <p id="memMsg" class="text-xs min-h-4"></p>
+
+      <div class="space-y-2">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">PERFIL</h2>
+        <p class="text-xs text-cyan-600">Lo que Jarvis siempre tiene en cuenta sobre usted: trabajo, familia, rutinas, cómo prefiere que le hable.</p>
+        <textarea id="perfilTexto" maxlength="2000" rows="5" placeholder="Ej.: Soy jefe de guardia. Trabajo por turnos. Prefiero respuestas cortas."
+                  class="w-full bg-slate-950 border border-cyan-800 rounded px-2 py-2 text-sm text-cyan-100 outline-none focus:border-cyan-400"></textarea>
+        <div class="flex items-center justify-between gap-2">
+          <p id="perfilMsg" class="text-xs min-h-4"></p>
+          <button id="btnPerfil" class="bg-cyan-600 text-slate-950 font-bold rounded px-3 py-1 text-xs disabled:opacity-50">Guardar perfil</button>
+        </div>
+      </div>
+
+      <div class="space-y-3">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">RECUERDOS <span id="memCuenta" class="text-cyan-600"></span></h2>
+        <form id="formMemNueva" class="space-y-2">
+          <textarea id="memNuevaTexto" maxlength="1000" rows="2" placeholder="Agregar un recuerdo a mano…"
+                    class="w-full bg-slate-950 border border-cyan-800 rounded px-2 py-2 text-sm text-cyan-100 outline-none focus:border-cyan-400"></textarea>
+          <div class="flex items-center justify-between gap-2">
+            <p id="memNuevaMsg" class="text-xs min-h-4"></p>
+            <div class="flex gap-2 shrink-0">
+              <select id="memNuevaCat" class="bg-slate-950 border border-cyan-800 rounded px-2 py-1 text-xs">
+                <option value="persona">Persona</option><option value="proyecto">Proyecto</option>
+                <option value="preferencia">Preferencia</option><option value="dato" selected>Dato</option>
+              </select>
+              <button class="bg-cyan-600 text-slate-950 font-bold rounded px-3 py-1 text-xs disabled:opacity-50">Agregar</button>
+            </div>
+          </div>
+        </form>
+        <input id="memFiltro" placeholder="Buscar en los recuerdos…" autocomplete="off"
+               class="w-full bg-slate-950 border border-cyan-900 rounded px-2 py-1 text-xs text-cyan-100 outline-none focus:border-cyan-500">
+        <div id="memLista" class="space-y-2"></div>
+      </div>
+
+      <div class="space-y-3">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">NOMBRES PROTEGIDOS</h2>
+        <p class="text-xs text-cyan-600">Nunca llegan a Gemini con su nombre real: se reemplazan por un código como [PERSONA_3] y se vuelven a poner en su servidor.</p>
+        <form id="formSeud" class="space-y-2">
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="seudValor" required maxlength="120" placeholder="Nombre y apellido" autocomplete="off"
+                   class="flex-1 min-w-0 bg-slate-950 border border-cyan-800 rounded px-2 py-2 text-sm text-cyan-100 outline-none focus:border-cyan-400">
+            <select id="seudTipo" class="bg-slate-950 border border-cyan-800 rounded px-2 py-2 text-xs">
+              <option value="PERSONA">Persona</option><option value="LUGAR">Lugar</option><option value="ORG">Organización</option>
+            </select>
+          </div>
+          <input id="seudAlias" maxlength="300" placeholder="Otras formas de nombrarlo, separadas por coma (ej.: Pérez, Juancito)" autocomplete="off"
+                 class="w-full bg-slate-950 border border-cyan-800 rounded px-2 py-2 text-xs text-cyan-100 outline-none focus:border-cyan-400">
+          <div class="flex items-center justify-between gap-2">
+            <p id="seudMsg" class="text-xs min-h-4"></p>
+            <button class="bg-cyan-600 text-slate-950 font-bold rounded px-3 py-1 text-xs disabled:opacity-50 shrink-0">Proteger</button>
+          </div>
+        </form>
+        <div id="seudLista" class="space-y-2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== Panel: Actividad ========== -->
+  <section id="panelActividad" class="flex-1 min-h-0 overflow-y-auto px-4 py-4" role="tabpanel" hidden>
+    <div class="max-w-2xl mx-auto pb-8">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">REGISTRO DE ACTIVIDAD</h2>
+        <button id="btnActRecargar" class="border border-cyan-800 rounded px-2 py-1 text-xs text-cyan-300" aria-label="Actualizar">↻ Actualizar</button>
+      </div>
+      <p class="text-xs text-cyan-600 mb-3">Todo lo que hizo Jarvis. El texto de sus mensajes no se registra acá.</p>
+      <div id="actLista"></div>
+    </div>
+  </section>
 </section>
 
 <!-- ============================ AJUSTES ============================ -->

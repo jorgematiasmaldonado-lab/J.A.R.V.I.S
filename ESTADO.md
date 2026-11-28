@@ -4,32 +4,30 @@
 > Lo actualiza Claude Code al final de cada sesión de trabajo (ver `CLAUDE.md`).
 
 **Autor:** Maldonado Jorge Matias
-**Última actualización:** 27/11/2026
+**Última actualización:** 28/11/2026
 
 ## Descripción
 Asistente personal con IA (voz y texto) al estilo de Jarvis: un cerebro en Supabase (Edge Function + Gemini) y varios canales (web/PWA, luego app Android y Telegram), con seguridad, memoria y seudonimización de datos personales.
 
 ## Avance
-**15 %** · **Fase 0 — Seguridad base: terminada y funcionando.** Próxima: Fase 1.
+**25 %** · **Fase 1 — Memoria y conversaciones: código terminado y probado.** Falta desplegarlo y probarlo en el celular.
 
 ## Último trabajo hecho
-- Jarvis quedó publicado en GitHub Pages y responde con Gemini desde el servidor, sin claves en el teléfono.
-- Login funcionando con código por email y verificación en dos pasos.
-- El despliegue del backend pasa por pruebas, aprobación manual y una verificación de que nada sea público.
-- El despliegue usa permisos mínimos: el token de Supabase solo puede publicar funciones.
-- Se corrigió un permiso faltante en la base que impedía reconocer al dueño.
+- Memoria de largo plazo: Jarvis guarda lo importante, lo recuerda por significado en cada mensaje y responde "¿qué sabés de…?".
+- "Olvidá…" deja una tarjeta Confirmar o Cancelar. Es la base para todas las acciones sensibles futuras.
+- Pantallas nuevas: Memoria, con perfil, recuerdos y nombres protegidos, y Actividad.
+- El servidor rechaza guardar contraseñas, tarjetas, documentos, CBU y claves.
+- Se actualizaron las acciones de GitHub que propuso Dependabot.
 
 ## Pendientes
-- [x] Configurar Supabase, GitHub y la clave nueva de Gemini.
-- [x] Primer ingreso y primera consulta.
-- [ ] Borrar la clave vieja de Gemini en AI Studio.
+- [ ] Aprobar el despliegue del backend y probar la Fase 1 con la lista del README.
+- [ ] Cargar en Memoria los nombres de las personas que conviene proteger.
 - [ ] Instalar la app en el celular y probar la voz y el modo manos libres.
-- [ ] Revisar las actualizaciones de GitHub Actions que propuso Dependabot.
 
 ## Problemas conocidos
 - En Chrome de Android el modo manos libres se corta y reinicia. Se resuelve con Porcupine en la Fase 4.
-- Los nombres que no estén cargados en la tabla de seudónimos no se ocultan al modelo.
+- Los nombres que no estén en "Nombres protegidos" no se ocultan al modelo.
 - El proyecto de Supabase está en Estados Unidos, no en São Paulo. Funciona igual, con un poco más de demora.
 
 ## Próximos pasos
-- **Fase 1:** memoria de largo plazo, pantalla Memoria para ver, editar y olvidar, perfil editable y carga de seudónimos desde la app.
+- **Fase 2:** tareas, proyectos, recordatorios que insisten, Google Calendar, resumen matutino y bot de Telegram.

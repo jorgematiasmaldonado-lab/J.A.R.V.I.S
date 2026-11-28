@@ -82,3 +82,60 @@ export function saludo() {
   const h = new Date().getHours();
   return h >= 5 && h < 13 ? "Buen día" : h >= 13 && h < 20 ? "Buenas tardes" : "Buenas noches";
 }
+
+// =====================================================================
+// Fase 1
+// =====================================================================
+
+/** Crea un elemento con clases y texto (siempre con textContent). */
+export function el(etiqueta, clases = "", texto = "") {
+  const e = document.createElement(etiqueta);
+  if (clases) e.className = clases;
+  if (texto) e.textContent = texto;
+  return e;
+}
+
+/** Fecha corta y legible en es-AR. */
+export function fechaCorta(iso) {
+  try {
+    return new Date(iso).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch { return iso; }
+}
+
+/**
+ * Tarjeta Confirmar / Cancelar para una acción sensible.
+ * onResolver(confirmar:boolean) → Promise<string> con el texto del resultado.
+ */
+export function tarjetaConfirmacion(accion, onResolver) {
+  const t = el("div", "mr-auto w-full max-w-[85%] bg-amber-950/40 border border-amber-500/60 rounded-xl px-3 py-3 text-sm space-y-2");
+  t.dataset.accion = accion.id;
+  t.append(el("p", "text-[11px] tracking-widest text-amber-300", "REQUIERE SU CONFIRMACIÓN"));
+  t.append(el("p", "text-amber-100", accion.resumen));
+  if (accion.detalle?.length) {
+    const ul = el("ul", "list-disc pl-5 text-amber-100/80 text-xs space-y-1");
+    for (const d of accion.detalle) ul.append(el("li", "", String(d)));
+    t.append(ul);
+  }
+  const botones = el("div", "flex gap-2 pt-1");
+  const si = el("button", "flex-1 bg-amber-500 text-slate-950 font-bold rounded py-2 disabled:opacity-50", "Confirmar");
+  const no = el("button", "flex-1 border border-amber-700 text-amber-200 rounded py-2 disabled:opacity-50", "Cancelar");
+  const estado = el("p", "text-xs text-amber-200/90 min-h-4");
+  const resolver = async (confirmar) => {
+    si.disabled = no.disabled = true;
+    estado.textContent = confirmar ? "Ejecutando…" : "Cancelando…";
+    try {
+      estado.textContent = await onResolver(confirmar);
+      botones.remove();
+    } catch (e) {
+      estado.textContent = "No se pudo: " + e.message;
+      si.disabled = no.disabled = false;
+    }
+  };
+  si.onclick = () => resolver(true);
+  no.onclick = () => resolver(false);
+  botones.append(si, no);
+  t.append(botones, estado);
+  $("msgs").appendChild(t);
+  bajarChat();
+  return t;
+}

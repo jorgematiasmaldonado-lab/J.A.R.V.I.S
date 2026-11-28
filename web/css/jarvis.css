@@ -58,3 +58,12 @@ body {
   .r1, .r2, .r3 { animation: none; }
   .escuchando .nucleo, .pensando .nucleo, .hablando .nucleo { animation-duration: 2.5s; }
 }
+
+/* ---------------- Pestañas (Fase 1) ---------------- */
+.pestana {
+  font-size: .7rem; letter-spacing: .25em; padding: .35rem .7rem; border-radius: .5rem;
+  color: #0891b2; border: 1px solid transparent; background: transparent; cursor: pointer;
+}
+.pestana:hover { color: #67e8f9; }
+.pestana.activa { color: #a5f3fc; border-color: #155e75; background: rgba(8, 51, 68, .5); }
+.pestana:focus-visible { outline: 2px solid #67e8f9; outline-offset: 2px; }

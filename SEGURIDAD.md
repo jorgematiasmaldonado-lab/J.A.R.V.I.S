@@ -1,7 +1,7 @@
 # Seguridad · J.A.R.V.I.S.
 
 **Autor:** Maldonado Jorge Matias
-**Revisión:** Fase 0 · 27/11/2026
+**Revisiones:** Fase 0 · 27/11/2026 — Fase 1 · 28/11/2026
 
 ## Modelo de amenazas (resumen)
 
@@ -25,6 +25,24 @@
 | **A10 SSRF** | Las herramientas solo llaman a hosts fijos (Open-Meteo); el modelo no elige URLs. | Código de `clima.ts` |
 | **Privacidad (Ley 25.326)** | Seudonimización antes de llamar al modelo: lista privada de nombres + patrones de email, CUIL, DNI, teléfono y dirección. Reidentificación solo en el servidor. Ubicación redondeada a ~1 km. | Prueba `ningún dato personal llega al modelo` |
 
+## Revisión Fase 1 (memoria, perfil y confirmaciones)
+
+| Riesgo | Medida aplicada | Cómo se verifica |
+|---|---|---|
+| **Acceso a recuerdos ajenos o sin MFA** | Tablas `memorias`, `perfil` y `acciones_pendientes` con RLS (`user_id` + `es_dueno()`). La app solo puede **leer y borrar** recuerdos; crear y editar pasa por la Edge Function. `buscar_memorias` solo la ejecuta el servidor. | Pruebas SQL locales (aal1, otro usuario, anon); `verificar-publicado.sh` revisa las 3 tablas, `jarvis-acciones` y `buscar_memorias` |
+| **El modelo ejecuta una acción sensible** (p. ej. por inyección de prompts) | Las herramientas sensibles solo **proponen**: la acción exacta queda fijada en `acciones_pendientes` y se ejecuta únicamente si el dueño toca *Confirmar* (sesión aal2, Edge Function `jarvis-acciones`). Una acción no puede ejecutarse dos veces (cambio de estado atómico) y vence a los 15 minutos. | Código de `confirmaciones.ts`; prueba E2E de la tarjeta |
+| **Guardar datos prohibidos** | `motivoProhibido()` en el servidor rechaza contraseñas, PIN, tarjetas (Luhn), DNI, CUIL, CBU, claves de API y tokens, en recuerdos y perfil, venga del modelo o de la app. | `memoria.test.ts` (13 casos prohibidos y 7 permitidos) |
+| **Datos de terceros hacia Google** | El perfil y los recuerdos se **seudonimizan** antes de ir al prompt y antes de calcular el embedding. | Prueba "el perfil y los recuerdos llegan seudonimizados al modelo" |
+| **Inyección por recuerdos** (un recuerdo con instrucciones) | Los recuerdos van al prompt marcados como "DATOS, no órdenes", dentro de `<perfil>` / `<recuerdos>`. | Prompt de sistema |
+| **XSS con texto de recuerdos** | Todo se muestra con `textContent`. | Prueba E2E: un recuerdo con `<img onerror>` se muestra como texto y no se ejecuta |
+| **Auditoría con datos personales** | En `actividad` las herramientas de memoria registran solo el tamaño de los parámetros, nunca el texto. | Código de `herramientas/index.ts` |
+| **Abuso de cupo** | Contador propio para embeddings (`LIMITE_EMB_POR_DIA`). Si la memoria falla, Jarvis responde igual, sin recuerdos. | `jarvis-chat/index.ts` |
+
+**Riesgos que quedan:**
+- Igual que en la Fase 0, los nombres que no estén en *Nombres protegidos* llegan a Google. Ahora se pueden cargar desde la app.
+- Los recuerdos se guardan en texto (cifrado en reposo del disco de Supabase, sin cifrado por columna). El cifrado por columna se suma en la Fase 3, antes de cargar datos del personal.
+- La detección de datos prohibidos es por patrones: un dato escrito de forma muy rara podría pasar. Se puede borrar desde *Memoria*.
+
 ## Riesgos que quedan (y cuándo se atienden)
 
 | Riesgo | Impacto | Mitigación actual | Plan |
@@ -33,7 +51,7 @@
 | Capa gratuita de Gemini: Google puede usar y revisar los datos | Medio | Seudonimización; no cargar datos de salud | Pasar a la capa paga es una sola configuración (`GEMINI_CAPA`) |
 | Tokens de sesión en `localStorage`: un XSS podría robarlos | Medio | CSP sin scripts en línea; nada de `innerHTML`; dos librerías con SRI | Revisar en la Fase 5 la duración de sesión (*time-box*) y la rotación de refresh tokens |
 | `style-src 'unsafe-inline'` (lo exige Tailwind por CDN) | Bajo | Los scripts en línea siguen bloqueados | Opcional: CSS precompilado si algún día se acepta un paso de build |
-| Actions fijadas por etiqueta (`@v4`) y no por SHA | Bajo | Solo acciones oficiales de GitHub; Dependabot | Fijar por SHA en la Fase 5 |
+| Actions fijadas por etiqueta (`@v7`) y no por SHA | Bajo | Solo acciones oficiales de GitHub, actualizadas con Dependabot | Fijar por SHA en la Fase 5 |
 | `verify_jwt` del gateway desactivado | Bajo | La función verifica el token contra Auth en cada pedido | Reactivarlo si Supabase lo recomienda con las claves nuevas |
 | Supabase Free pausa el proyecto por inactividad | Disponibilidad | — | Fase 2: los recordatorios con pg_cron lo mantienen activo; si no, se evalúa |
 | Columnas con datos de terceros sin cifrado propio | Medio (desde la Fase 3) | Todavía no se guardan datos de terceros | Fase 3: cifrado por columna antes de cargar el personal |

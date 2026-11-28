@@ -14,7 +14,7 @@ URL="${SUPABASE_URL%/}"
 CLAVE="${SUPABASE_CLAVE_PUBLICA}"
 FALLAS=0
 
-for tabla in dueno ajustes mensajes actividad seudonimos uso_contadores; do
+for tabla in dueno ajustes mensajes actividad seudonimos uso_contadores memorias perfil acciones_pendientes; do
   cuerpo=$(curl -sS -w '\n%{http_code}' "$URL/rest/v1/$tabla?select=*&limit=1" -H "apikey: $CLAVE" -H "Authorization: Bearer $CLAVE")
   codigo=$(echo "$cuerpo" | tail -1)
   datos=$(echo "$cuerpo" | sed '$d')
@@ -38,6 +38,25 @@ elif [[ "$cuerpo" == *configuracion_incompleta* ]]; then
   FALLAS=1
 else
   echo "✗ jarvis-chat respondió $codigo a un pedido sin sesión: $cuerpo"; FALLAS=1
+fi
+
+# jarvis-acciones también rechaza pedidos sin sesión
+codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$URL/functions/v1/jarvis-acciones" \
+  -H "Origin: https://ejemplo-no-permitido.com" -H "Content-Type: application/json" -d '{"accion":"confirmar","id":"x"}')
+if [[ "$codigo" == "401" || "$codigo" == "403" ]]; then
+  echo "✓ jarvis-acciones rechaza pedidos sin sesión (HTTP $codigo)"
+else
+  echo "✗ jarvis-acciones respondió $codigo a un pedido sin sesión"; FALLAS=1
+fi
+
+# buscar_memorias es solo del servidor
+codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$URL/rest/v1/rpc/buscar_memorias" \
+  -H "apikey: $CLAVE" -H "Authorization: Bearer $CLAVE" -H "Content-Type: application/json" \
+  -d '{"p_user":"00000000-0000-0000-0000-000000000000","p_embedding":"[0]"}')
+if [[ "$codigo" == "401" || "$codigo" == "403" || "$codigo" == "404" ]]; then
+  echo "✓ buscar_memorias no es ejecutable por anónimos (HTTP $codigo)"
+else
+  echo "✗ buscar_memorias respondió $codigo a un anónimo"; FALLAS=1
 fi
 
 # Funciones internas: el rol anónimo no puede ejecutarlas
