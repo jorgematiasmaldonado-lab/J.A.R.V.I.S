@@ -28,13 +28,25 @@ export interface AccionPendiente {
   vence: string;
 }
 
+function idsDe(datos: Record<string, unknown>): number[] {
+  return (Array.isArray(datos.ids) ? datos.ids : []).filter((x): x is number => Number.isInteger(x)).slice(0, 20);
+}
+
 type Ejecutor = (datos: Record<string, unknown>, userId: string) => Promise<Record<string, unknown>>;
 
 /** Lo que hace cada tipo de acción al confirmarse. Agregar acá las nuevas. */
 const EJECUTORES: Record<string, Ejecutor> = {
-  olvidar_memorias: async (datos, userId) => {
-    const ids = (Array.isArray(datos.ids) ? datos.ids : []).filter((x): x is number => Number.isInteger(x)).slice(0, 20);
-    return { borrados: await borrarMemorias(userId, ids) };
+  olvidar_memorias: async (datos, userId) => ({ borrados: await borrarMemorias(userId, idsDe(datos)) }),
+  borrar_tareas: async (datos, userId) => {
+    const { data, error } = await admin().from("tareas").delete().eq("user_id", userId).in("id", idsDe(datos)).select("id");
+    if (error) throw new Error("borrar tareas: " + error.message);
+    return { borrados: data?.length ?? 0 };
+  },
+  cancelar_recordatorios: async (datos, userId) => {
+    const { data, error } = await admin().from("recordatorios").update({ estado: "cancelado" })
+      .eq("user_id", userId).in("id", idsDe(datos)).in("estado", ["pendiente", "avisado"]).select("id");
+    if (error) throw new Error("cancelar recordatorios: " + error.message);
+    return { cancelados: data?.length ?? 0 };
   },
 };
 

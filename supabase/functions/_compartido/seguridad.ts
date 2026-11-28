@@ -31,6 +31,9 @@ export const config = {
   get limiteDia() { return Number(Deno.env.get("LIMITE_POR_DIA") ?? 300); },
   get limiteLlmDia() { return Number(Deno.env.get("LIMITE_LLM_POR_DIA") ?? 800); },
   get limiteEmbDia() { return Number(Deno.env.get("LIMITE_EMB_POR_DIA") ?? 800); },
+  /** Acciones de la app (tildar tareas, abrir pantallas): contador propio, más amplio que el del chat. */
+  get limiteAccionesMinuto() { return Number(Deno.env.get("LIMITE_ACCIONES_POR_MINUTO") ?? 40); },
+  get limiteAccionesDia() { return Number(Deno.env.get("LIMITE_ACCIONES_POR_DIA") ?? 2000); },
 };
 
 let _admin: SupabaseClient | null = null;
@@ -135,7 +138,7 @@ export async function verificarUsuario(req: Request, canal: string): Promise<Usu
 // Límites de uso
 // ---------------------------------------------------------------------
 export async function consumirCupo(
-  userId: string, tipo: "peticion" | "llm" | "emb", maxMinuto: number, maxDia: number, zona: string, cantidad = 1,
+  userId: string, tipo: "peticion" | "accion" | "llm" | "emb", maxMinuto: number, maxDia: number, zona: string, cantidad = 1,
 ): Promise<{ permitido: boolean; minuto: number; dia: number }> {
   const { data, error } = await admin().rpc("consumir_cupo", {
     p_user: userId, p_tipo: tipo, p_max_minuto: maxMinuto, p_max_dia: maxDia, p_zona: zona, p_cantidad: cantidad,

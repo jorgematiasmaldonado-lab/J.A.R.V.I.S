@@ -10,7 +10,7 @@
 const CACHE = "jarvis-__VERSION__";
 const ARCHIVOS = [
   "./", "index.html", "manifest.webmanifest", "css/jarvis.css",
-  "js/app.js", "js/api.js", "js/auth.js", "js/config.js", "js/supa.js", "js/ui.js", "js/voz.js", "js/paneles.js",
+  "js/app.js", "js/api.js", "js/auth.js", "js/config.js", "js/supa.js", "js/ui.js", "js/voz.js", "js/paneles.js", "js/organizacion.js",
   "icons/icono.svg", "icons/icono-192.png", "icons/icono-512.png", "img/jmm.png",
 ];
 

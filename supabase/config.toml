@@ -14,3 +14,12 @@ verify_jwt = false
 
 [functions.jarvis-acciones]
 verify_jwt = false
+
+[functions.jarvis-cron]
+verify_jwt = false
+
+[functions.jarvis-telegram]
+verify_jwt = false
+
+[functions.jarvis-google]
+verify_jwt = false

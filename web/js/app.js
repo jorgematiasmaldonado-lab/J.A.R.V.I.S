@@ -9,6 +9,7 @@ import * as auth from "./auth.js";
 import * as api from "./api.js";
 import * as voz from "./voz.js";
 import { cargarActividad, cargarMemoria } from "./paneles.js";
+import { cargarConexiones, cargarHoy, conectarVoz, retornoDeGoogle, revisarAvisos } from "./organizacion.js";
 import {
   $, abrirModal, agregarMsg, bajarChat, cerrarModal, limpiarChat, llenarVoces, mensajeLogin, mostrarPasoLogin,
   mostrarVista, saludo, setEstado, tarjetaConfirmacion,
@@ -170,8 +171,18 @@ async function entrarApp() {
   try {
     for (const a of await api.accionesPendientes()) mostrarTarjeta(a);
   } catch { /* no es grave: se pueden volver a pedir */ }
+  // Vuelta desde la autorización de Google
+  const google = retornoDeGoogle();
+  if (google) agregarMsg("jarvis", google);
+  // Avisos de recordatorios dentro de la app (además de Telegram)
+  revisarAvisos();
   actualizarUbicacion();
 }
+
+// Revisa los avisos cada minuto mientras la app está a la vista
+conectarVoz((texto) => { if (!ocupado && !voz.hablando) voz.hablar(texto); });
+setInterval(() => { if (!document.hidden && !$("vistaApp").hidden) revisarAvisos(); }, 60_000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("vistaApp").hidden) revisarAvisos(); });
 
 // ---------------- Pestañas ----------------
 function mostrarPanel(id) {
@@ -180,7 +191,8 @@ function mostrarPanel(id) {
     b.classList.toggle("activa", activa);
     b.setAttribute("aria-selected", String(activa));
   }
-  for (const p of ["panelChat", "panelMemoria", "panelActividad"]) $(p).hidden = p !== id;
+  for (const p of ["panelChat", "panelHoy", "panelMemoria", "panelActividad"]) $(p).hidden = p !== id;
+  if (id === "panelHoy") cargarHoy();
   if (id === "panelMemoria") cargarMemoria();
   if (id === "panelActividad") cargarActividad();
 }
@@ -324,8 +336,14 @@ $("btnConfig").onclick = () => {
   $("cfgRate").value = voz.prefs.rate;
   $("cfgPitch").value = voz.prefs.pitch;
   $("cfgMsg").textContent = "";
+  $("cfgResumenActivo").checked = ajustes.resumen_activo !== false;
+  $("cfgResumenHora").value = (ajustes.resumen_hora ?? "07:30").slice(0, 5);
+  $("cfgNmDesde").value = (ajustes.no_molestar_desde ?? "23:00").slice(0, 5);
+  $("cfgNmHasta").value = (ajustes.no_molestar_hasta ?? "07:00").slice(0, 5);
+  $("cfgAvisarEventos").checked = ajustes.avisar_eventos !== false;
   cargarVoces();
   abrirModal();
+  cargarConexiones();
 };
 
 function leerPrefsVoz() {
@@ -344,9 +362,15 @@ $("btnGuardar").onclick = async () => {
   leerPrefsVoz();
   voz.prefs.guardar();
   usarUbicacion.set($("cfgUbicacion").checked);
+  const hora = (id, porDefecto) => (/^\d{2}:\d{2}$/.test($(id).value) ? $(id).value : porDefecto);
   const nuevo = {
     nombre_trato: $("cfgNombre").value.trim().slice(0, 40) || "señor",
     ciudad_base: $("cfgCiudad").value.trim().slice(0, 80) || null,
+    resumen_activo: $("cfgResumenActivo").checked,
+    resumen_hora: hora("cfgResumenHora", "07:30"),
+    no_molestar_desde: hora("cfgNmDesde", "23:00"),
+    no_molestar_hasta: hora("cfgNmHasta", "07:00"),
+    avisar_eventos: $("cfgAvisarEventos").checked,
   };
   const ciudadCambio = nuevo.ciudad_base !== (ajustes.ciudad_base ?? null);
   try {

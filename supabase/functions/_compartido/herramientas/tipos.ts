@@ -21,7 +21,20 @@ export interface Ajustes {
   ciudad_lat: number | null;
   ciudad_lon: number | null;
   zona_horaria: string;
+  google_conectado: boolean;
+  no_molestar_desde: string;
+  no_molestar_hasta: string;
+  telegram_chat_id: number | null;
 }
+
+export const AJUSTES_POR_DEFECTO: Ajustes = {
+  nombre_trato: "señor", ciudad_base: null, ciudad_lat: null, ciudad_lon: null,
+  zona_horaria: "America/Argentina/Cordoba", google_conectado: false,
+  no_molestar_desde: "23:00", no_molestar_hasta: "07:00", telegram_chat_id: null,
+};
+
+export const COLUMNAS_AJUSTES =
+  "nombre_trato, ciudad_base, ciudad_lat, ciudad_lon, zona_horaria, google_conectado, no_molestar_desde, no_molestar_hasta, telegram_chat_id";
 
 export interface Contexto {
   userId: string;

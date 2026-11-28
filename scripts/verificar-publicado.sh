@@ -14,7 +14,8 @@ URL="${SUPABASE_URL%/}"
 CLAVE="${SUPABASE_CLAVE_PUBLICA}"
 FALLAS=0
 
-for tabla in dueno ajustes mensajes actividad seudonimos uso_contadores memorias perfil acciones_pendientes; do
+for tabla in dueno ajustes mensajes actividad seudonimos uso_contadores memorias perfil acciones_pendientes \
+             proyectos tareas recordatorios eventos_avisos resumenes telegram_vinculos oauth_estados config_privada; do
   cuerpo=$(curl -sS -w '\n%{http_code}' "$URL/rest/v1/$tabla?select=*&limit=1" -H "apikey: $CLAVE" -H "Authorization: Bearer $CLAVE")
   codigo=$(echo "$cuerpo" | tail -1)
   datos=$(echo "$cuerpo" | sed '$d')
@@ -48,6 +49,22 @@ if [[ "$codigo" == "401" || "$codigo" == "403" ]]; then
 else
   echo "✗ jarvis-acciones respondió $codigo a un pedido sin sesión"; FALLAS=1
 fi
+
+# El reloj y el webhook de Telegram exigen su secreto
+for f in jarvis-cron jarvis-telegram; do
+  codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$URL/functions/v1/$f" -H "Content-Type: application/json" -d '{}')
+  if [[ "$codigo" == "401" ]]; then echo "✓ $f rechaza llamadas sin su secreto (HTTP $codigo)"; else echo "✗ $f respondió $codigo sin secreto"; FALLAS=1; fi
+done
+
+# La vuelta de Google con un "state" inventado no hace nada
+codigo=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/functions/v1/jarvis-google?code=x&state=inventado")
+if [[ "$codigo" == "400" || "$codigo" == "503" ]]; then echo "✓ jarvis-google rechaza un state inventado (HTTP $codigo)"; else echo "✗ jarvis-google respondió $codigo a un state inventado"; FALLAS=1; fi
+
+# Funciones del servidor que nadie de afuera puede ejecutar
+for rpc in leer_token_google tick_jarvis hay_trabajo_reloj configurar_reloj; do
+  codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$URL/rest/v1/rpc/$rpc" -H "apikey: $CLAVE" -H "Authorization: Bearer $CLAVE" -H "Content-Type: application/json" -d '{}')
+  if [[ "$codigo" == "401" || "$codigo" == "403" || "$codigo" == "404" ]]; then echo "✓ $rpc no es ejecutable por anónimos (HTTP $codigo)"; else echo "✗ $rpc respondió $codigo a un anónimo"; FALLAS=1; fi
+done
 
 # buscar_memorias es solo del servidor
 codigo=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$URL/rest/v1/rpc/buscar_memorias" \

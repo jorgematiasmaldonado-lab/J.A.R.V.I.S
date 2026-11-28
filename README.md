@@ -2,7 +2,7 @@
 
 Asistente personal con inteligencia artificial, al estilo de Jarvis.
 **Autor:** Maldonado Jorge Matias · JMM Gestiones & Tecnología
-**Estado:** Fase 1 (memoria y conversaciones). Ver [`ESTADO.md`](ESTADO.md) y [`SEGURIDAD.md`](SEGURIDAD.md).
+**Estado:** Fase 2 (organización: tareas, recordatorios, agenda y Telegram). Ver [`ESTADO.md`](ESTADO.md) y [`SEGURIDAD.md`](SEGURIDAD.md).
 
 ---
 
@@ -48,11 +48,15 @@ web/                         lo que se publica en GitHub Pages
   js/voz.js                  hablar (por frases) y escuchar (manos libres)
   js/ui.js · app.js          interfaz, tarjetas de confirmación y flujo principal
   js/paneles.js              pantallas Memoria (perfil, recuerdos, nombres) y Actividad
+  js/organizacion.js         pantalla Hoy, conexiones (Google, Telegram) y avisos en la app
   manifest.webmanifest · sw.js · icons/ · img/
 supabase/
   migrations/                esquema, RLS y funciones SQL
   functions/jarvis-chat/     el cerebro (charla, herramientas, memoria automática)
-  functions/jarvis-acciones/ crear/editar recuerdos, perfil, confirmar/cancelar acciones
+  functions/jarvis-acciones/ recuerdos, perfil, tareas, agenda de hoy, vínculo de Telegram, confirmar/cancelar
+  functions/jarvis-cron/     el reloj: avisos con insistencia, resumen matutino, sincronizar calendario
+  functions/jarvis-telegram/ webhook del bot (solo atiende al dueño)
+  functions/jarvis-google/   conectar Google Calendar (OAuth con PKCE)
   functions/_compartido/     seguridad, agente, seudonimización, LLM, embeddings,
                              memoria, confirmaciones, herramientas
   functions/_pruebas/        pruebas automáticas (deno test)
@@ -190,6 +194,52 @@ Secrets opcionales nuevos (Supabase → Edge Functions → Secrets):
 
 > Si agregás un nombre protegido **después** de tener recuerdos sobre esa persona, la búsqueda de esos recuerdos puede funcionar un poco peor. Editarlos (botón Editar → Guardar) recalcula su significado.
 
+## Organización (Fase 2)
+
+**Qué hace:**
+- **Tareas:** *"Anotá renovar el seguro para el viernes"*, *"¿Qué tengo pendiente?"*, *"Ya hice lo del seguro"*. También desde la pantalla **Hoy**.
+- **Proyectos:** *"Registrá el proyecto Gestión de personal ETAC, también le digo ETAC"*. Las tareas se pueden asociar a un proyecto.
+- **Recordatorios que insisten:** *"Recordame mañana a las 10 llamar al banco"*. Avisa por Telegram (con botón **Entendido**) y en la app abierta. Si no confirmás, repite cada 5 minutos, hasta 2 horas. En el horario de *no molestar* espera, salvo las reuniones.
+- **Agenda (Google Calendar):** *"¿Qué tengo mañana?"*, *"Agendá reunión con el jefe el jueves a las 9 en el cuartel"*. Si falta la hora o el lugar, pregunta.
+- **Reuniones a prueba de olvidos:** cada evento con hora del calendario recibe aviso **la noche anterior (21:00), 1 hora antes y 15 minutos antes**, con insistencia hasta que empiece.
+- **Resumen matutino** a la hora elegida, por Telegram y en la pantalla **Hoy** (con botón *Escuchar*).
+- **Bot de Telegram:** el mismo Jarvis y la misma memoria. Solo te responde a vos; a cualquier otro lo ignora y lo registra. Las acciones sensibles se confirman con botones. Los audios no se procesan todavía (por privacidad): usá el micrófono del teclado.
+
+### Configurar Telegram (10 minutos)
+
+1. En Telegram, abrí **@BotFather** → `/newbot` → nombre `Jarvis` → usuario que termine en `bot` (ej.: `jmm_jarvis_bot`). Copiá el **token** que te da (no lo pegues en ningún chat).
+2. En @BotFather: `/setjoingroups` → elegí tu bot → **Disable** (nadie puede meterlo en grupos).
+3. **Supabase → Edge Functions → Secrets:** agregá `TELEGRAM_BOT_TOKEN` con el token.
+4. **Seguridad:** en Telegram, *Ajustes → Privacidad y seguridad → Verificación en dos pasos* → activala. Tu cuenta de Telegram pasa a ser una llave de Jarvis.
+5. En Jarvis: **Ajustes → Conexiones → Telegram → Vincular** → abrí el enlace en el celular → **Iniciar**. Jarvis te confirma por Telegram. El enlace sirve una vez y vence en 15 minutos.
+
+### Configurar Google Calendar (15 minutos)
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → tu proyecto (puede ser el mismo de Gemini) → **APIs y servicios → Biblioteca** → buscá **Google Calendar API** → **Habilitar**.
+2. **Google Auth Platform** (o *Pantalla de consentimiento de OAuth*):
+   - Tipo de usuario: **Externo**. Nombre de la app: `J.A.R.V.I.S.`; correo de asistencia y de contacto: el tuyo.
+   - **Acceso a datos / Permisos:** agregá solo `https://www.googleapis.com/auth/calendar.events`.
+   - **Público:** tocá **Publicar app** → *En producción*. Esto es importante: en modo *Prueba* el permiso **vence cada 7 días**. Google va a advertir que la app no está verificada; para uso personal no hace falta verificarla.
+3. **Clientes / Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web**:
+   - **URI de redireccionamiento autorizado:** `https://<tu-proyecto>.supabase.co/functions/v1/jarvis-google` (las 20 letras de tu proyecto).
+   - Copiá el **ID de cliente** y el **Secreto del cliente**.
+4. **Supabase → Edge Functions → Secrets:**
+   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
+   - `APP_URL` = `https://jorgematiasmaldonado-lab.github.io/J.A.R.V.I.S/`
+5. En Jarvis: **Ajustes → Conexiones → Google Calendar → Conectar** → elegí tu cuenta → en la advertencia *"Google no verificó esta app"*: **Configuración avanzada → Ir a J.A.R.V.I.S.** → permití el acceso al calendario. Volvés a Jarvis con el mensaje *"Google Calendar conectado"*.
+
+Para revocar el acceso en cualquier momento: Ajustes → Conexiones → **Desconectar**, o desde [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+### Secrets opcionales nuevos
+
+| Nombre | Por defecto | Para qué |
+|---|---|---|
+| `LIMITE_ACCIONES_POR_MINUTO` / `_POR_DIA` | 40 / 2000 | Acciones de la app (tildar tareas, abrir pantallas), separadas del límite del chat |
+
+### Cómo funciona el reloj
+
+`pg_cron` revisa **cada minuto dentro de la base** si hay recordatorios vencidos, un resumen pendiente o si pasaron 15 minutos desde la última sincronización del calendario. Solo en ese caso llama a la función `jarvis-cron`, con un secreto que se genera dentro de la base (nadie lo copia a mano). El workflow *Backend* le indica la dirección del proyecto en el paso *Configurar el reloj*.
+
 ## Pruebas manuales
 
 **En la compu (Chrome o Edge):**
@@ -220,12 +270,25 @@ Secrets opcionales nuevos (Supabase → Edge Functions → Secrets):
 - [ ] Memoria → proteger un nombre y preguntar algo con ese nombre: en *Actividad* la consulta muestra "dato(s) protegidos".
 - [ ] Cerrar sesión y abrir en el celular: los recuerdos están ahí.
 
+**Organización (Fase 2):**
+- [ ] Ajustes → Conexiones → **Vincular Telegram** → Iniciar → llega la bienvenida.
+- [ ] Desde otra cuenta de Telegram, escribirle al bot → **no responde**; en *Actividad* aparece "Acceso denegado".
+- [ ] "Recordame en 2 minutos tomar agua" → llega por Telegram con botón **Entendido**; sin tocarlo, a los 5 minutos insiste; al tocarlo, deja de insistir.
+- [ ] "Anotá comprar repuestos para el lunes" → aparece en **Hoy**; tildarla la marca como hecha.
+- [ ] Ajustes → Conexiones → **Conectar Google** → vuelve con "conectado".
+- [ ] "¿Qué tengo mañana?" → lee la agenda real.
+- [ ] "Agendá reunión con el jefe" (sin hora) → **pregunta la hora** antes de crearla.
+- [ ] Crear una reunión para dentro de 1 h 20 min → a los 20 min llega "En una hora…" y a los 65 min "En 15 minutos…".
+- [ ] **Hoy → Generar ahora** → llega el resumen por Telegram.
+- [ ] Por Telegram: "Borrá la tarea de los repuestos" → llegan botones **Confirmar / Cancelar**.
+- [ ] Mandarle un audio por Telegram → explica que use el dictado del teclado.
+
 **Seguridad:**
 - [ ] En *Actions → Backend*, el paso "Verificar que nada sea público" está en verde.
 - [ ] `verificar_seguridad.sql` → todo OK.
 - [ ] En Supabase → *Table Editor → actividad* aparecen los chats y herramientas, sin el texto de los mensajes.
 
-## Costos (Fases 0 y 1)
+## Costos (Fases 0 a 2)
 
 | Servicio | Plan | Costo |
 |---|---|---|
@@ -234,6 +297,9 @@ Secrets opcionales nuevos (Supabase → Edge Functions → Secrets):
 | Gemini API (charla) | Capa gratuita | USD 0 · con límites por minuto y por día; **Google puede usar los datos de la capa gratuita para mejorar sus productos** (por eso la seudonimización) |
 | Gemini API (embeddings de memoria) | Capa gratuita | USD 0 · límite diario propio; Jarvis lo cuenta con `LIMITE_EMB_POR_DIA` |
 | pgvector | Incluido en Supabase | USD 0 |
+| pg_cron y pg_net (el reloj) | Incluidos en Supabase | USD 0 · solo llama a una función cuando hay algo que hacer (unas 3.000 llamadas al mes; el plan gratis incluye 500.000) |
+| Telegram Bot API | Gratis | USD 0 |
+| Google Calendar API | Gratis | USD 0 |
 | Open-Meteo | Gratis, uso no comercial | USD 0 |
 | **Total** | | **USD 0 / mes** |
 
@@ -272,3 +338,7 @@ cp scripts/buscar-secretos.sh .git/hooks/pre-commit
 | No llega el código por email | Revisar spam; el correo integrado de Supabase permite pocos envíos por hora |
 | "Falta configurar la conexión con Supabase" | Faltan las Variables del paso 5 o no corrió *Publicar web* |
 | El micrófono no funciona | Permiso del navegador; en iPhone el reconocimiento de voz del navegador es limitado |
+| Telegram no responde | ¿Está cargado `TELEGRAM_BOT_TOKEN`? ¿Tocaste **Vincular** después de cargarlo (eso registra el webhook)? |
+| "Google no entregó un permiso permanente" | Quitá el acceso de J.A.R.V.I.S. en myaccount.google.com/permissions y volvé a conectar |
+| El permiso de Google se pierde cada 7 días | La app de Google quedó en modo *Prueba*: publicala (*En producción*) y volvé a conectar |
+| No llegan los avisos | Telegram vinculado y `Actions → Backend` en verde (el paso *Configurar el reloj* tiene que haber corrido) |

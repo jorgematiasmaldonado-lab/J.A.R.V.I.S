@@ -28,6 +28,8 @@ const MENSAJES = {
   limite: "recibí demasiadas consultas seguidas; deme un momento",
   peticion_invalida: "el mensaje no tiene un formato válido",
   mensaje_demasiado_grande: "el mensaje es demasiado largo",
+  configuracion_incompleta: "falta configurar algo en el servidor (vea el README)",
+  no_se_pudo: "no se pudo completar",
 };
 
 /**
@@ -106,33 +108,50 @@ export async function borrarHistorial() {
   if (error) throw new ErrorApi("no pude borrar la conversación", "db", 0);
 }
 
+const COLUMNAS_AJUSTES =
+  "nombre_trato, ciudad_base, resumen_activo, resumen_hora, no_molestar_desde, no_molestar_hasta, avisar_eventos, google_conectado, telegram_chat_id";
+
 export async function leerAjustes() {
-  const { data, error } = await sb.from("ajustes").select("nombre_trato, ciudad_base").maybeSingle();
+  const { data, error } = await sb.from("ajustes").select(COLUMNAS_AJUSTES).maybeSingle();
   if (error) throw new ErrorApi("no pude leer los ajustes", "db", 0);
-  return data ?? { nombre_trato: "señor", ciudad_base: null };
+  return data ?? {
+    nombre_trato: "señor", ciudad_base: null, resumen_activo: true, resumen_hora: "07:30:00",
+    no_molestar_desde: "23:00:00", no_molestar_hasta: "07:00:00", avisar_eventos: true, google_conectado: false, telegram_chat_id: null,
+  };
 }
 
-export async function guardarAjustes({ nombre_trato, ciudad_base, ciudadCambio }) {
+/** Guarda solo columnas que la app puede escribir (el servidor protege el resto). */
+export async function guardarAjustes({ ciudadCambio, ...campos }) {
   const uid = await usuarioId();
-  const fila = { user_id: uid, nombre_trato, ciudad_base: ciudad_base || null, actualizado: new Date().toISOString() };
+  const permitidos = ["nombre_trato", "ciudad_base", "resumen_activo", "resumen_hora", "no_molestar_desde", "no_molestar_hasta", "avisar_eventos"];
+  const fila = { user_id: uid, actualizado: new Date().toISOString() };
+  for (const k of permitidos) if (k in campos) fila[k] = campos[k];
+  if ("ciudad_base" in fila) fila.ciudad_base = fila.ciudad_base || null;
   // Si cambió la ciudad, se borran las coordenadas para que el servidor la vuelva a buscar
   if (ciudadCambio) Object.assign(fila, { ciudad_lat: null, ciudad_lon: null });
-  const { error } = await sb.from("ajustes").upsert(fila, { onConflict: "user_id" });
+  // Primero se actualiza; si todavía no hay fila, se crea. (No se usa "upsert" porque
+  // reescribiría user_id, y la base solo permite cambiar estas columnas puntuales.)
+  const { user_id, ...cambios } = fila;
+  const { data, error } = await sb.from("ajustes").update(cambios).eq("user_id", user_id).select("user_id");
   if (error) throw new ErrorApi("no pude guardar los ajustes", "db", 0);
+  if (!data?.length) {
+    const { error: e2 } = await sb.from("ajustes").insert(fila);
+    if (e2) throw new ErrorApi("no pude guardar los ajustes", "db", 0);
+  }
 }
 
 // =====================================================================
 // Fase 1 · Memoria, perfil, nombres protegidos, actividad y confirmaciones
 // =====================================================================
 
-/** Llama a la Edge Function jarvis-acciones (crear/editar memoria, perfil, confirmar). */
-async function llamarAcciones(cuerpo) {
+/** Llama a una Edge Function propia con la sesión actual. */
+async function llamarFuncion(nombre, cuerpo) {
   const { data } = await sb.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new ErrorApi(MENSAJES.sin_sesion, "sin_sesion", 401);
   let r;
   try {
-    r = await fetch(`${SUPABASE_URL}/functions/v1/jarvis-acciones`, {
+    r = await fetch(`${SUPABASE_URL}/functions/v1/${nombre}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}`, "apikey": SUPABASE_CLAVE_PUBLICA },
       body: JSON.stringify(cuerpo),
@@ -145,6 +164,8 @@ async function llamarAcciones(cuerpo) {
   if (!r.ok) throw new ErrorApi(j.mensaje ?? MENSAJES[j.error] ?? `error ${r.status} del servidor`, j.error ?? "http", r.status);
   return j;
 }
+
+const llamarAcciones = (cuerpo) => llamarFuncion("jarvis-acciones", cuerpo);
 
 export const crearMemoria = (texto, categoria) => llamarAcciones({ accion: "memoria_crear", texto, categoria });
 export const editarMemoria = (id, texto, categoria) => llamarAcciones({ accion: "memoria_editar", id, texto, categoria });
@@ -205,3 +226,68 @@ export async function accionesPendientes() {
   errorDb(error, "leer las acciones pendientes");
   return data ?? [];
 }
+
+// =====================================================================
+// Fase 2 · Hoy, tareas, recordatorios, agenda y conexiones
+// =====================================================================
+
+export async function ultimoResumen() {
+  const { data, error } = await sb.from("resumenes").select("fecha, texto").order("fecha", { ascending: false }).limit(1).maybeSingle();
+  errorDb(error, "leer el resumen");
+  return data;
+}
+export const resumenAhora = () => llamarAcciones({ accion: "resumen_ahora" });
+export const agendaHoy = () => llamarAcciones({ accion: "agenda_hoy" });
+export const crearTarea = (titulo, vence, prioridad) =>
+  llamarAcciones({ accion: "tarea_crear", titulo, ...(vence ? { vence } : {}), ...(prioridad ? { prioridad } : {}) });
+
+export async function tareasPendientes() {
+  const { data, error } = await sb.from("tareas").select("id, titulo, vence, prioridad, proyecto_id")
+    .eq("estado", "pendiente").order("vence", { ascending: true, nullsFirst: false }).order("prioridad").limit(100);
+  errorDb(error, "leer las tareas");
+  return data ?? [];
+}
+
+export async function completarTarea(id) {
+  const ahora = new Date().toISOString();
+  const { error } = await sb.from("tareas").update({ estado: "hecha", completada: ahora, actualizado: ahora }).eq("id", id);
+  errorDb(error, "completar la tarea");
+}
+
+export async function borrarTarea(id) {
+  const { error } = await sb.from("tareas").delete().eq("id", id);
+  errorDb(error, "borrar la tarea");
+}
+
+export async function proximosRecordatorios() {
+  const desde = new Date(Date.now() - 12 * 3600e3).toISOString();
+  const { data, error } = await sb.from("recordatorios").select("id, texto, cuando, estado, origen")
+    .in("estado", ["pendiente", "avisado"]).gte("cuando", desde).order("cuando").limit(50);
+  errorDb(error, "leer los recordatorios");
+  return data ?? [];
+}
+
+/** Recordatorios ya avisados que esperan "Entendido" (para el aviso dentro de la app). */
+export async function avisosSinConfirmar() {
+  const desde = new Date(Date.now() - 12 * 3600e3).toISOString();
+  const { data, error } = await sb.from("recordatorios").select("id, texto, cuando")
+    .eq("estado", "avisado").gte("cuando", desde).order("cuando").limit(10);
+  errorDb(error, "leer los avisos");
+  return data ?? [];
+}
+
+export async function confirmarRecordatorio(id) {
+  const { error } = await sb.from("recordatorios").update({ estado: "confirmado", confirmado: new Date().toISOString() }).eq("id", id);
+  errorDb(error, "confirmar el recordatorio");
+}
+
+export async function cancelarRecordatorio(id) {
+  const { error } = await sb.from("recordatorios").update({ estado: "cancelado" }).eq("id", id);
+  errorDb(error, "cancelar el recordatorio");
+}
+
+export const conexiones = () => llamarAcciones({ accion: "conexiones" });
+export const telegramCodigo = () => llamarAcciones({ accion: "telegram_codigo" });
+export const telegramDesvincular = () => llamarAcciones({ accion: "telegram_desvincular" });
+export const googleIniciar = () => llamarFuncion("jarvis-google", { accion: "iniciar" });
+export const googleDesconectar = () => llamarFuncion("jarvis-google", { accion: "desconectar" });

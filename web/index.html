@@ -115,9 +115,13 @@
   <!-- Pestañas -->
   <nav class="flex gap-1 px-4 mt-3" role="tablist" aria-label="Secciones">
     <button class="pestana activa" role="tab" data-panel="panelChat" aria-selected="true">CHAT</button>
+    <button class="pestana" role="tab" data-panel="panelHoy" aria-selected="false">HOY</button>
     <button class="pestana" role="tab" data-panel="panelMemoria" aria-selected="false">MEMORIA</button>
     <button class="pestana" role="tab" data-panel="panelActividad" aria-selected="false">ACTIVIDAD</button>
   </nav>
+
+  <!-- Avisos de recordatorios dentro de la app -->
+  <div id="avisosApp" class="px-4 mt-2 space-y-2" aria-live="assertive"></div>
 
   <!-- ========== Panel: Chat ========== -->
   <div id="panelChat" class="flex-1 min-h-0 flex flex-col" role="tabpanel">
@@ -141,6 +145,51 @@
     <button class="bg-cyan-600 text-slate-950 font-bold rounded-lg px-4" aria-label="Enviar">➤</button>
   </form>
   </div>
+
+  <!-- ========== Panel: Hoy ========== -->
+  <section id="panelHoy" class="flex-1 min-h-0 overflow-y-auto px-4 py-4" role="tabpanel" hidden>
+    <div class="max-w-2xl mx-auto space-y-8 pb-8">
+      <div class="space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <h2 class="text-sm tracking-[.3em] text-cyan-300">RESUMEN DEL DÍA</h2>
+          <div class="flex gap-2 shrink-0">
+            <button id="btnResumenEscuchar" class="border border-cyan-800 rounded px-2 py-1 text-xs text-cyan-300">▶ Escuchar</button>
+            <button id="btnResumenAhora" class="border border-cyan-800 rounded px-2 py-1 text-xs text-cyan-300 disabled:opacity-50">↻ Generar ahora</button>
+          </div>
+        </div>
+        <p id="resumenFecha" class="text-[11px] text-cyan-600 min-h-4"></p>
+        <p id="resumenTexto" class="text-sm text-cyan-100 whitespace-pre-wrap break-words bg-slate-900/80 border border-cyan-900 rounded-lg p-3"></p>
+      </div>
+
+      <div class="space-y-2">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">AGENDA</h2>
+        <div id="agendaLista" class="space-y-2"></div>
+      </div>
+
+      <div class="space-y-2">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">TAREAS <span id="tareasCuenta" class="text-cyan-600"></span></h2>
+        <form id="formTarea" class="flex flex-col sm:flex-row gap-2">
+          <input id="tareaTitulo" required minlength="2" maxlength="300" placeholder="Nueva tarea…" autocomplete="off"
+                 class="flex-1 min-w-0 bg-slate-950 border border-cyan-800 rounded px-2 py-2 text-sm text-cyan-100 outline-none focus:border-cyan-400">
+          <div class="flex gap-2">
+            <input id="tareaVence" type="date" aria-label="Vence" class="bg-slate-950 border border-cyan-800 rounded px-2 py-1 text-xs text-cyan-100">
+            <select id="tareaPrioridad" aria-label="Prioridad" class="bg-slate-950 border border-cyan-800 rounded px-2 py-1 text-xs">
+              <option value="1">Alta</option><option value="2" selected>Normal</option><option value="3">Baja</option>
+            </select>
+            <button class="bg-cyan-600 text-slate-950 font-bold rounded px-3 py-1 text-xs disabled:opacity-50">Agregar</button>
+          </div>
+        </form>
+        <p id="tareaMsg" class="text-xs min-h-4"></p>
+        <div id="tareasLista" class="space-y-2"></div>
+      </div>
+
+      <div class="space-y-2">
+        <h2 class="text-sm tracking-[.3em] text-cyan-300">RECORDATORIOS</h2>
+        <p class="text-xs text-cyan-600">Para crear uno, pídaselo a Jarvis: "recordame mañana a las diez llamar al banco".</p>
+        <div id="recLista" class="space-y-2"></div>
+      </div>
+    </div>
+  </section>
 
   <!-- ========== Panel: Memoria ========== -->
   <section id="panelMemoria" class="flex-1 min-h-0 overflow-y-auto px-4 py-4" role="tabpanel" hidden>
@@ -230,6 +279,37 @@
     <label class="block">Ciudad base (para el clima)
       <input id="cfgCiudad" maxlength="80" placeholder="Ej.: Córdoba, Argentina" class="w-full mt-1 bg-slate-950 border border-cyan-800 rounded px-2 py-2">
     </label>
+
+    <p class="text-[11px] text-cyan-600 tracking-widest pt-2">ORGANIZACIÓN</p>
+    <label class="flex items-center gap-2 flex-wrap">
+      <input id="cfgResumenActivo" type="checkbox" class="accent-cyan-400"> Resumen matutino por Telegram a las
+      <input id="cfgResumenHora" type="time" class="bg-slate-950 border border-cyan-800 rounded px-2 py-1">
+    </label>
+    <div class="flex items-center gap-2 flex-wrap">
+      No molestar de <input id="cfgNmDesde" type="time" aria-label="No molestar desde" class="bg-slate-950 border border-cyan-800 rounded px-2 py-1">
+      a <input id="cfgNmHasta" type="time" aria-label="No molestar hasta" class="bg-slate-950 border border-cyan-800 rounded px-2 py-1">
+    </div>
+    <p class="text-[11px] text-cyan-700">En ese horario los recordatorios comunes esperan; los avisos de reuniones llegan igual.</p>
+    <label class="flex items-center gap-2">
+      <input id="cfgAvisarEventos" type="checkbox" class="accent-cyan-400"> Avisar las reuniones del calendario (la noche anterior, 1 h y 15 min antes)
+    </label>
+
+    <p class="text-[11px] text-cyan-600 tracking-widest pt-2">CONEXIONES</p>
+    <div class="flex items-center justify-between gap-2">
+      <div class="min-w-0"><p>Google Calendar</p><p id="conexGoogleEstado" class="text-[11px] text-cyan-600">Consultando…</p></div>
+      <button id="btnGoogle" class="shrink-0 border border-cyan-700 rounded px-3 py-2 text-xs disabled:opacity-50" disabled>…</button>
+    </div>
+    <div class="flex items-center justify-between gap-2">
+      <div class="min-w-0"><p>Telegram</p><p id="conexTelegramEstado" class="text-[11px] text-cyan-600">Consultando…</p></div>
+      <button id="btnTelegram" class="shrink-0 border border-cyan-700 rounded px-3 py-2 text-xs disabled:opacity-50" disabled>…</button>
+    </div>
+    <div id="telegramVinculo" class="bg-slate-950 border border-cyan-800 rounded p-3 text-xs space-y-2" hidden>
+      <p>1. Abra este enlace en el celular donde usa Telegram:</p>
+      <a id="telegramEnlace" target="_blank" rel="noopener noreferrer" class="block text-cyan-300 underline break-all"></a>
+      <p>2. Toque <strong>Iniciar</strong>. Jarvis le confirma por Telegram. El enlace sirve una sola vez y vence en 15 minutos.</p>
+      <p class="text-amber-300">Importante: active la verificación en dos pasos de Telegram (Ajustes → Privacidad y seguridad → Verificación en dos pasos).</p>
+    </div>
+    <p id="conexMsg" class="text-xs text-red-300 min-h-4"></p>
 
     <p class="text-[11px] text-cyan-600 tracking-widest pt-2">EN ESTE DISPOSITIVO</p>
     <label class="flex items-center gap-2">

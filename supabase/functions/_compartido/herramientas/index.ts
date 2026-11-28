@@ -17,9 +17,27 @@ import { ErrorValidacion, validar } from "../validar.ts";
 import type { DeclaracionHerramienta } from "../llm/tipos.ts";
 import { clima } from "./clima.ts";
 import { buscarRecuerdos, guardarRecuerdo, olvidarRecuerdo } from "./memoria.ts";
+import {
+  borrarTarea, cancelarRecordatorio, completarTarea, crearProyecto, crearRecordatorio, crearTarea, listarProyectos,
+  listarRecordatorios, listarTareas,
+} from "./organizacion.ts";
+import { crearEvento, listarEventos } from "./agenda.ts";
+import { ErrorGoogle } from "../google.ts";
 import type { Contexto, Herramienta } from "./tipos.ts";
 
-const REGISTRO: Herramienta[] = [clima, guardarRecuerdo, buscarRecuerdos, olvidarRecuerdo];
+const REGISTRO: Herramienta[] = [
+  clima,
+  guardarRecuerdo, buscarRecuerdos, olvidarRecuerdo,
+  crearTarea, listarTareas, completarTarea, borrarTarea,
+  crearProyecto, listarProyectos,
+  crearRecordatorio, listarRecordatorios, cancelarRecordatorio,
+  listarEventos, crearEvento,
+];
+
+/** Herramientas cuyos parámetros son datos personales: en la auditoría va solo el tamaño. */
+const PARAMETROS_PRIVADOS = new Set([
+  "guardar_memoria", "buscar_memorias", "crear_tarea", "completar_tarea", "crear_proyecto", "crear_recordatorio", "crear_evento",
+]);
 const POR_NOMBRE = new Map(REGISTRO.map((h) => [h.nombre, h]));
 
 export function declaraciones(): DeclaracionHerramienta[] {
@@ -32,10 +50,10 @@ export function estadoDe(nombre: string): string {
 
 /** Mensaje de error apto para mostrar (los errores internos no se detallan). */
 function mensajeDeError(e: unknown): string {
-  if (e instanceof ErrorMemoria || e instanceof ErrorLLM || e instanceof ErrorValidacion) return e.message;
+  if (e instanceof ErrorMemoria || e instanceof ErrorLLM || e instanceof ErrorValidacion || e instanceof ErrorGoogle) return e.message;
   const msg = (e as Error)?.message ?? "";
   // Los errores de herramientas propias (p. ej. clima) ya vienen redactados para el usuario
-  if (/^(no |el servicio|la ciudad|no tengo)/i.test(msg)) return msg;
+  if (/^(no |el servicio|la ciudad|no tengo|fecha|esa )/i.test(msg)) return msg;
   console.error("Error en herramienta:", msg);
   return "tuve un problema interno con esa función";
 }
@@ -84,8 +102,8 @@ export async function ejecutarHerramienta(
     await registrarActividad(ctx.userId, {
       tipo: "herramienta", herramienta: nombre, ok: true, canal: ctx.canal,
       // Los parámetros de memoria son datos personales: se registra solo su tamaño
-      parametros: nombre.includes("memoria") ? { largo: JSON.stringify(args).length } : args,
-      resultado: nombre.includes("memoria") ? { ok: true } : resumir(res),
+      parametros: PARAMETROS_PRIVADOS.has(nombre) ? { largo: JSON.stringify(args).length } : args,
+      resultado: PARAMETROS_PRIVADOS.has(nombre) ? { ok: !("error" in res) } : resumir(res),
     });
     return res;
   } catch (e) {

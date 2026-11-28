@@ -18,8 +18,8 @@ Autor del proyecto: **Maldonado Jorge Matias**.
 
 ## Pruebas
 ```bash
-npx deno@2.9.6 test supabase/functions/_pruebas
-npx deno@2.9.6 check supabase/functions/jarvis-chat/index.ts
+npx deno@2.9.6 test --allow-env supabase/functions/_pruebas
+npx deno@2.9.6 check supabase/functions/*/index.ts
 npx deno@2.9.6 lint supabase/functions
 ```
 

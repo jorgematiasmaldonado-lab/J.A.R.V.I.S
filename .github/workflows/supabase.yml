@@ -54,9 +54,9 @@ jobs:
       - name: Buscar secretos
         run: bash scripts/buscar-secretos.sh
       - name: Pruebas (incluye "ningún nombre llega al modelo")
-        run: npx --yes "$DENO" test supabase/functions/_pruebas
+        run: npx --yes "$DENO" test --allow-env supabase/functions/_pruebas
       - name: Verificación de tipos
-        run: npx --yes "$DENO" check supabase/functions/jarvis-chat/index.ts
+        run: npx --yes "$DENO" check supabase/functions/*/index.ts
       - name: Lint
         run: npx --yes "$DENO" lint supabase/functions
 
@@ -119,9 +119,15 @@ jobs:
 
       - name: Publicar las Edge Functions
         run: |
-          for f in jarvis-chat jarvis-acciones; do
+          for f in jarvis-chat jarvis-acciones jarvis-cron jarvis-telegram jarvis-google; do
             npx --yes "$SUPABASE_CLI" functions deploy "$f" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
           done
+
+      - name: Configurar el reloj (pg_cron → jarvis-cron)
+        run: |
+          command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "select public.configurar_reloj('https://${PROJECT_REF}.supabase.co')"
+          echo "✓ Reloj configurado"
 
       - name: Verificar que nada sea público
         env:

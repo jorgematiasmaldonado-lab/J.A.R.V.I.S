@@ -1,7 +1,7 @@
 # Seguridad · J.A.R.V.I.S.
 
 **Autor:** Maldonado Jorge Matias
-**Revisiones:** Fase 0 · 27/11/2026 — Fase 1 · 28/11/2026
+**Revisiones:** Fase 0 · 27/11/2026 — Fase 1 · 28/11/2026 — Fase 2 · 28/11/2026
 
 ## Modelo de amenazas (resumen)
 
@@ -43,6 +43,25 @@
 - Los recuerdos se guardan en texto (cifrado en reposo del disco de Supabase, sin cifrado por columna). El cifrado por columna se suma en la Fase 3, antes de cargar datos del personal.
 - La detección de datos prohibidos es por patrones: un dato escrito de forma muy rara podría pasar. Se puede borrar desde *Memoria*.
 
+## Revisión Fase 2 (organización, reloj, Telegram y Google)
+
+| Riesgo | Medida aplicada | Cómo se verifica |
+|---|---|---|
+| **Un ataque en el navegador desvía los avisos a otro Telegram** | Permisos **por columna**: la app no puede escribir `telegram_chat_id` ni `google_conectado`; solo el servidor, después de un código de un solo uso generado con sesión aal2. | Prueba E2E: el navegador intenta cambiar el chat → la base lo rechaza |
+| **Extraños hablándole al bot** | Webhook firmado (`X-Telegram-Bot-Api-Secret-Token`, secreto generado en la base); solo el chat privado vinculado; a los demás no se les responde y queda en `actividad`. Botones verificados por remitente. | Prueba de integración: extraño ignorado, código no reutilizable, botón ajeno sin efecto |
+| **Cualquiera dispara el reloj** | `jarvis-cron` exige un secreto de 256 bits generado dentro de la base; `tick_jarvis` y `configurar_reloj` no son ejecutables desde la API. | `verificar-publicado.sh`; prueba de integración (401 sin secreto) |
+| **Robo del permiso de Google** | Refresh token **cifrado en Supabase Vault**; solo funciones del servidor lo leen. Permiso mínimo `calendar.events`. OAuth con `state` de un solo uso (anti-CSRF) y **PKCE**. Si Google revoca el permiso, se borra y se marca como desconectado. | Pruebas de `google.ts`; prueba SQL de Vault; `verificar-publicado.sh` (`leer_token_google` no ejecutable) |
+| **Avisos duplicados o perdidos** | Cada aviso se "toma" con una actualización condicional antes de enviarse; el resumen se marca antes de generarse (sin `or` en updates: PostgREST lo rechaza). Los recordatorios en horario de no molestar se corren, no se pierden. | Pruebas de `avisos.ts` y de integración (insistencia, una sola vez por día) |
+| **Inyección desde el calendario** (un evento con instrucciones) | Los títulos de eventos son datos para las herramientas; el resumen va al modelo marcado como DATOS y seudonimizado. Un título con datos prohibidos no se copia a la base. | Prompt; `programacion.ts` |
+| **Formato malicioso en Telegram** | Mensajes en texto plano (sin HTML ni Markdown). | Prueba de `telegram.ts` |
+| **Audios con nombres hacia Google** | Los audios de Telegram no se procesan (no se pueden seudonimizar antes de transcribir). | Prueba de integración |
+| **Abuso de cupo** | Límites separados para chat (10/min) y acciones de la app (40/min). | Prueba de integración |
+
+**Riesgos que quedan:**
+- En Telegram no hay verificación en dos pasos de Jarvis: la seguridad depende de **tu cuenta de Telegram** (activá su verificación en dos pasos). Los mensajes con bots no tienen cifrado de extremo a extremo.
+- La app de Google queda **publicada sin verificar** (uso personal). Si alguna vez se quisiera ofrecer a terceros, habría que verificarla.
+- Un desconocido que escribe al bot genera una fila de auditoría por mensaje; si alguien abusara, se puede ver en *Actividad* y desvincular/cambiar el bot. (Límite por remitente: Fase 5.)
+
 ## Riesgos que quedan (y cuándo se atienden)
 
 | Riesgo | Impacto | Mitigación actual | Plan |
@@ -53,7 +72,7 @@
 | `style-src 'unsafe-inline'` (lo exige Tailwind por CDN) | Bajo | Los scripts en línea siguen bloqueados | Opcional: CSS precompilado si algún día se acepta un paso de build |
 | Actions fijadas por etiqueta (`@v7`) y no por SHA | Bajo | Solo acciones oficiales de GitHub, actualizadas con Dependabot | Fijar por SHA en la Fase 5 |
 | `verify_jwt` del gateway desactivado | Bajo | La función verifica el token contra Auth en cada pedido | Reactivarlo si Supabase lo recomienda con las claves nuevas |
-| Supabase Free pausa el proyecto por inactividad | Disponibilidad | — | Fase 2: los recordatorios con pg_cron lo mantienen activo; si no, se evalúa |
+| Supabase Free pausa el proyecto por inactividad | Disponibilidad | El reloj consulta la base cada minuto, pero no está confirmado que eso cuente como actividad | Revisar si se pausa en una semana sin uso; si pasa, se evalúa en la Fase 5 |
 | Columnas con datos de terceros sin cifrado propio | Medio (desde la Fase 3) | Todavía no se guardan datos de terceros | Fase 3: cifrado por columna antes de cargar el personal |
 | Sin botón de pánico | Medio | "Cerrar en todos" + rotar la clave en AI Studio | Fase 5 |
 

@@ -1,5 +1,5 @@
 // =====================================================================
-// J.A.R.V.I.S. · Edge Function "jarvis-chat" (el cerebro)
+// J.A.R.V.I.S. · Edge Function "jarvis-chat" (canal web, con streaming)
 // Autor: Maldonado Jorge Matias
 //
 // POST /functions/v1/jarvis-chat
@@ -7,41 +7,29 @@
 //   Cuerpo: { "mensaje": "…", "canal": "web", "ubicacion": { "lat": -31.4, "lon": -64.5 } }
 //
 // Responde con Server-Sent Events:
-//   event: estado  data: { "texto": "CONSULTANDO SENSORES" }
-//   event: texto   data: { "t": "pedacito de respuesta" }
-//   event: fin     data: { "texto": "respuesta completa", "aviso": null }
-//   event: error   data: { "mensaje": "…" }
+//   event: estado        data: { "texto": "CONSULTANDO SENSORES" }
+//   event: texto         data: { "t": "pedacito de respuesta" }
+//   event: confirmacion  data: { "id", "resumen", "detalle", "vence" }
+//   event: fin           data: { "texto": "respuesta completa", "aviso": null }
+//   event: error         data: { "mensaje": "…" }
 //
-// Secrets necesarios (Supabase → Edge Functions → Secrets):
-//   GEMINI_API_KEY, ALLOWED_EMAIL, ALLOWED_ORIGINS
-// Opcionales: LLM_MODELO, LLM_PROVEEDOR, GEMINI_CAPA,
-//   LIMITE_POR_MINUTO, LIMITE_POR_DIA, LIMITE_LLM_POR_DIA
+// La conversación en sí está en _compartido/conversacion.ts (la misma
+// que usa Telegram).
 // =====================================================================
 
-import { ejecutarAgente, type MensajeGuardado } from "../_compartido/agente.ts";
-import { declaraciones, ejecutarHerramienta, estadoDe } from "../_compartido/herramientas/index.ts";
-import type { Ajustes, Contexto } from "../_compartido/herramientas/tipos.ts";
-import { capaGemini, crearProveedor, ErrorLLM } from "../_compartido/llm/index.ts";
-import { crearEmbeddings } from "../_compartido/llm/embeddings.ts";
-import { buscarMemorias, contextoMemoria, leerPerfil, type Recuerdo } from "../_compartido/memoria.ts";
-import { promptSistema } from "../_compartido/prompt.ts";
+import { conversar, ErrorConversacion, prepararConversacion } from "../_compartido/conversacion.ts";
 import {
-  admin, config, consumirCupo, encabezadosCors, ErrorAcceso, origenPermitido, registrarActividad, respuestaJson,
-  verificarUsuario,
+  encabezadosCors, ErrorAcceso, origenPermitido, respuestaJson, verificarUsuario,
 } from "../_compartido/seguridad.ts";
-import { type EntradaSeudonimo, Seudonimizador } from "../_compartido/seudonimizar.ts";
 import { ErrorValidacion, type Esquema, validar } from "../_compartido/validar.ts";
 
 const TAMANO_MAXIMO = 16_000; // bytes del cuerpo
-const MENSAJES_DE_CONTEXTO = 20;
-const RECUERDOS_POR_MENSAJE = 5;
-const UMBRAL_RECUERDOS = Number(Deno.env.get("MEMORIA_UMBRAL") ?? 0.6);
 
 const ESQUEMA_PETICION: Esquema = {
   type: "object",
   properties: {
     mensaje: { type: "string", minLength: 1, maxLength: 2000 },
-    canal: { type: "string", enum: ["web", "android", "telegram"] },
+    canal: { type: "string", enum: ["web", "android"] },
     ubicacion: {
       type: "object",
       properties: {
@@ -53,12 +41,6 @@ const ESQUEMA_PETICION: Esquema = {
   },
   required: ["mensaje"],
 };
-
-const AJUSTES_POR_DEFECTO: Ajustes = {
-  nombre_trato: "señor", ciudad_base: null, ciudad_lat: null, ciudad_lon: null, zona_horaria: "America/Argentina/Cordoba",
-};
-
-class ErrorCupo extends Error {}
 
 // Si falta configuración (un secret), se responde un error claro en vez
 // de caerse: el detalle (qué secret falta) queda SOLO en los registros
@@ -91,8 +73,7 @@ async function atender(req: Request): Promise<Response> {
     usuarioId = (await verificarUsuario(req, "desconocido")).id;
   } catch (e) {
     if (e instanceof ErrorAcceso) return respuestaJson(req, e.estado, { error: e.codigo, mensaje: e.message });
-    console.error(e);
-    return respuestaJson(req, 500, { error: "error_interno" });
+    throw e;
   }
 
   // --- Cuerpo -----------------------------------------------------------
@@ -105,123 +86,37 @@ async function atender(req: Request): Promise<Response> {
     const msg = e instanceof ErrorValidacion ? e.message : "JSON inválido";
     return respuestaJson(req, 400, { error: "peticion_invalida", mensaje: msg });
   }
-  const canal = peticion.canal ?? "web";
-  const mensaje = peticion.mensaje.trim();
 
-  // --- Datos del usuario y límites -------------------------------------------
-  const db = admin();
-  const [{ data: ajustesDb, error: e1 }, { data: seudonimosDb, error: e2 }, { data: historialDb, error: e3 }] = await Promise.all([
-    db.from("ajustes").select("nombre_trato, ciudad_base, ciudad_lat, ciudad_lon, zona_horaria").eq("user_id", usuarioId).maybeSingle(),
-    db.from("seudonimos").select("id, tipo, valor, alias").eq("user_id", usuarioId),
-    db.from("mensajes").select("rol, contenido").eq("user_id", usuarioId).order("id", { ascending: false }).limit(MENSAJES_DE_CONTEXTO),
-  ]);
-  for (const e of [e1, e2, e3]) if (e) console.error("Error leyendo datos del usuario:", e.message);
-  // Sin la lista de seudónimos no se puede proteger a terceros: mejor no responder
-  if (e2) return respuestaJson(req, 500, { error: "error_base" });
-  const ajustes: Ajustes = { ...AJUSTES_POR_DEFECTO, ...(ajustesDb ?? {}) };
-  const zona = ajustes.zona_horaria;
-
+  // --- Datos del usuario y límites (antes de abrir el streaming) -------------
+  let preparada;
   try {
-    const cupo = await consumirCupo(usuarioId, "peticion", config.limiteMinuto, config.limiteDia, zona);
-    if (!cupo.permitido) {
-      await registrarActividad(usuarioId, { tipo: "limite", ok: false, canal, parametros: cupo });
-      return respuestaJson(req, 429, { error: "limite", mensaje: "Demasiadas consultas seguidas. Espere un momento." });
-    }
+    preparada = await prepararConversacion(usuarioId, peticion.canal ?? "web");
   } catch (e) {
-    console.error(e);
-    return respuestaJson(req, 500, { error: "error_interno" });
+    if (e instanceof ErrorConversacion) {
+      return respuestaJson(req, e.codigo === "limite" ? 429 : 500, { error: e.codigo, mensaje: e.message });
+    }
+    throw e;
   }
-
-  const seud = new Seudonimizador((seudonimosDb ?? []) as EntradaSeudonimo[]);
-  const historial = ((historialDb ?? []) as MensajeGuardado[]).reverse();
-  const emb = crearEmbeddings();
-  const contarEmb = async () => {
-    const c = await consumirCupo(usuarioId, "emb", 60, config.limiteEmbDia, zona);
-    if (!c.permitido) throw new ErrorCupo("alcanzamos el tope diario de consultas a la memoria");
-  };
-  const ctx: Contexto = { userId: usuarioId, canal, ajustes, ubicacion: peticion.ubicacion, seud, emb, contarEmb };
 
   // --- Respuesta en streaming (SSE) -------------------------------------------
   const codificador = new TextEncoder();
-  let llmHoy = 0;
-
   const cuerpo = new ReadableStream<Uint8Array>({
     async start(controlador) {
       const enviar = (evento: string, datos: unknown) => {
         try { controlador.enqueue(codificador.encode(`event: ${evento}\ndata: ${JSON.stringify(datos)}\n\n`)); } catch { /* cliente desconectado */ }
       };
-      const inicio = Date.now();
-      // Las acciones sensibles aparecen en la app como tarjeta Confirmar / Cancelar
-      ctx.onConfirmacion = (accion) => enviar("confirmacion", accion);
       try {
-        // Memoria: el perfil siempre, y los recuerdos parecidos al mensaje.
-        // Si falla (cupo, red), Jarvis responde igual, sin recuerdos.
-        let recuerdos: Recuerdo[] = [];
-        if (emb) {
-          try {
-            recuerdos = await buscarMemorias(
-              { userId: usuarioId, seud, emb, canal, contarEmb }, mensaje, RECUERDOS_POR_MENSAJE, UMBRAL_RECUERDOS,
-            );
-          } catch (e) {
-            console.error("Sin recuerdos para este mensaje:", (e as Error).message);
-          }
-        }
-        const perfil = await leerPerfil(usuarioId);
-
-        const resultado = await ejecutarAgente({
-          proveedor: crearProveedor(),
-          seud,
-          sistema: promptSistema({ nombreTrato: ajustes.nombre_trato, zonaHoraria: zona, canal }),
-          contexto: contextoMemoria(perfil, recuerdos, zona),
-          historial,
-          mensaje,
-          herramientas: declaraciones(),
-          ejecutar: (nombre, args) => ejecutarHerramienta(nombre, args, ctx),
-          estadoDe,
-          antesDeLlamar: async () => {
-            const c = await consumirCupo(usuarioId, "llm", 60, config.limiteLlmDia, zona);
-            llmHoy = c.dia;
-            if (!c.permitido) throw new ErrorCupo("alcanzamos el tope diario de consultas al modelo que usted configuró");
-          },
+        const r = await conversar(preparada, {
+          mensaje: peticion.mensaje,
+          ubicacion: peticion.ubicacion,
           onEstado: (texto) => enviar("estado", { texto }),
           onTexto: (t) => enviar("texto", { t }),
+          // Las acciones sensibles aparecen en la app como tarjeta Confirmar / Cancelar
+          onConfirmacion: (accion) => enviar("confirmacion", accion),
         });
-
-        const texto = resultado.texto || "Hecho, señor.";
-
-        // Guardar la conversación (datos reales: quedan solo en su base, con RLS)
-        const { error: errGuardar } = await db.from("mensajes").insert([
-          { user_id: usuarioId, rol: "user", contenido: mensaje, canal },
-          { user_id: usuarioId, rol: "model", contenido: texto.slice(0, 8000), canal },
-        ]);
-        if (errGuardar) console.error("No se guardó la conversación:", errGuardar.message);
-
-        await registrarActividad(usuarioId, {
-          tipo: "chat", canal, ok: true,
-          parametros: {
-            largo_mensaje: mensaje.length,
-            pasos: resultado.pasos,
-            llamadas_llm: resultado.llamadasLlm,
-            herramientas: resultado.herramientasUsadas,
-            recuerdos_usados: recuerdos.length,
-            datos_seudonimizados: seud.reemplazos,
-            capa: capaGemini(),
-            ms: Date.now() - inicio,
-          },
-        });
-
-        // Aviso al acercarse al tope diario
-        let aviso: string | null = null;
-        if (llmHoy >= config.limiteLlmDia * 0.8) {
-          aviso = `Lleva ${llmHoy} de ${config.limiteLlmDia} consultas al modelo hoy.`;
-        }
-        enviar("fin", { texto, aviso });
+        enviar("fin", r);
       } catch (e) {
-        let mensajeError = "tuve un inconveniente interno";
-        if (e instanceof ErrorLLM || e instanceof ErrorCupo) mensajeError = e.message;
-        else console.error(e);
-        await registrarActividad(usuarioId, { tipo: "chat", canal, ok: false, resultado: { error: mensajeError } });
-        enviar("error", { mensaje: mensajeError });
+        enviar("error", { mensaje: e instanceof ErrorConversacion ? e.message : "tuve un inconveniente interno" });
       } finally {
         controlador.close();
       }
